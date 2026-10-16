@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - run: scripts/lint.sh
+
+  test:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - uses: actions/cache@v4
+        with:
+          path: Packages/MirrorCore/.build
+          key: spm-${{ runner.os }}-${{ hashFiles('Packages/MirrorCore/Package.swift', 'Packages/MirrorCore/Package.resolved') }}
+      - run: xcodebuild -version
+      - run: scripts/test.sh
