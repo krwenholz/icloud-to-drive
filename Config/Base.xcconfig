@@ -1,0 +1,3 @@
+// Shared build settings. Signing identity lives in Local.xcconfig, which is
+// gitignored; the optional include keeps the build working without it.
+#include? "Local.xcconfig"

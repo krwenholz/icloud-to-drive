@@ -1,0 +1,4 @@
+// Copy to Config/Local.xcconfig and set your team ID to sign builds.
+// Find it in Xcode → Settings → Accounts. Without it, scripts/test.sh
+// builds unsigned.
+// DEVELOPMENT_TEAM = ABCDE12345

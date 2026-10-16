@@ -1,0 +1,37 @@
+name: DriveMirror
+options:
+  bundleIdPrefix: dev.krw
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+packages:
+  MirrorCore:
+    path: Packages/MirrorCore
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+targets:
+  DriveMirror:
+    type: application
+    platform: macOS
+    sources: [App]
+    dependencies:
+      - package: MirrorCore
+        product: MirrorCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Drive Mirror
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.productivity
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.krw.DriveMirror
+        PRODUCT_NAME: Drive Mirror
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: NO
