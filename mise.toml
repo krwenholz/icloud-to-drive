@@ -1,0 +1,4 @@
+# Swift itself comes from Xcode; mise pins everything else.
+[tools]
+xcodegen = "2.46.0"
+actionlint = "1.7.12"
