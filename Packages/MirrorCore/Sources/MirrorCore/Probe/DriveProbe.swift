@@ -59,7 +59,7 @@ public struct DriveProbe: Sendable {
       let email = try await drive.userEmail()
       record(
         "About returns email", email != nil,
-        email ?? "no email (is the userinfo.email scope granted?)")
+        email ?? "no email; the app will show \"Signed in\" without one")
     } catch {
       record("About returns email", false, "\(error)")
     }
@@ -145,16 +145,20 @@ public struct DriveProbe: Sendable {
     }
   }
 
+  static let updateMarker = "Updated by the probe."
+
+  /// In-place updates are unconfirmed for Markdown conversion, so check all three things the
+  /// engine relies on: same file ID, still a Google Doc, and the new text actually landed.
   private func updateInPlace(
     _ fixture: ProbeFixture, _ original: DriveFile, report: inout ProbeReport
-  )
-    async
-  {
+  ) async {
     let content = PreparedContent(
-      markdown: Data((fixture.markdown + "\n\nUpdated by the probe.\n").utf8))
+      markdown: Data((fixture.markdown + "\n\n\(Self.updateMarker)\n").utf8))
     var sameID = false
     var sameType = false
+    var contentChanged = false
     var detail = ""
+    var contentDetail = ""
     do {
       _ = try await drive.updateDoc(
         id: original.id, markdown: content.data, description: original.description ?? "",
@@ -163,14 +167,21 @@ public struct DriveProbe: Sendable {
       sameID = current.id == original.id
       sameType = current.mimeType == DriveFile.docMimeType
       detail = "\(current.id), \(current.mimeType)"
+      let exported = try await drive.exportMarkdown(id: original.id)
+      contentChanged = exported.contains(Self.updateMarker)
+      contentDetail = contentChanged ? "new text found in export" : "export lacks the new text"
     } catch {
       detail = "\(error)"
+      contentDetail = detail
     }
     report.checks.append(
       ProbeCheck(name: "In-place update keeps file ID", passed: sameID, detail: detail))
     report.checks.append(
       ProbeCheck(name: "In-place update keeps Google Doc type", passed: sameType, detail: detail))
-    report.recommendedStrategy = sameID && sameType ? .inPlace : .replace
+    report.checks.append(
+      ProbeCheck(
+        name: "In-place update changes content", passed: contentChanged, detail: contentDetail))
+    report.recommendedStrategy = sameID && sameType && contentChanged ? .inPlace : .replace
   }
 
   private func properties(hash: String) -> [String: String] {
