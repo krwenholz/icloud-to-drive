@@ -112,6 +112,26 @@ import Testing
     }
   }
 
+  @Test func unreadableSubfolderMakesRootUnavailable() throws {
+    let dir = try TempDirectory()
+    defer {
+      try? FileManager.default.setAttributes(
+        [.posixPermissions: 0o755], ofItemAtPath: dir.url.appendingPathComponent("locked").path)
+      dir.remove()
+    }
+    try dir.write("ok.md")
+    try dir.write("locked/secret.md")
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o000], ofItemAtPath: dir.url.appendingPathComponent("locked").path)
+
+    guard case .unavailable(let reason) = FileScanner().scan(root: dir.url, filter: PathFilter())
+    else {
+      Issue.record("expected the root to be unavailable")
+      return
+    }
+    #expect(reason.contains("locked"))
+  }
+
   @Test func emptyRootIsEmptyFiles() throws {
     let dir = try TempDirectory()
     defer { dir.remove() }

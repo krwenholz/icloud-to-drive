@@ -29,12 +29,19 @@ public struct FileScanner: Sendable {
       .isRegularFileKey, .isSymbolicLinkKey, .isDirectoryKey, .fileSizeKey,
       .contentModificationDateKey,
     ]
+    // A subfolder that can't be read would otherwise look empty, and every Doc in it would be
+    // trashed. Treat any enumeration error as the root being unavailable instead.
+    final class FirstError { var value: (URL, any Error)? }
+    let firstError = FirstError()
     guard
       let enumerator = fileManager.enumerator(
         at: resolvedRoot,
         includingPropertiesForKeys: keys,
         options: [.skipsHiddenFiles, .skipsPackageDescendants],
-        errorHandler: { _, _ in true }
+        errorHandler: { url, error in
+          if firstError.value == nil { firstError.value = (url, error) }
+          return true
+        }
       )
     else {
       return .unavailable(reason: "The folder can't be enumerated: \(root.path)")
@@ -65,6 +72,10 @@ public struct FileScanner: Sendable {
           size: Int64(values.fileSize ?? 0),
           modified: values.contentModificationDate ?? Date(timeIntervalSince1970: 0)
         ))
+    }
+    if let (url, error) = firstError.value {
+      return .unavailable(
+        reason: "Part of the folder can't be read (\(url.path)): \(error.localizedDescription)")
     }
     return .files(files.sorted { $0.path < $1.path })
   }
