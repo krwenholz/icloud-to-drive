@@ -68,7 +68,7 @@ private struct AccountSettings: View {
 private struct FolderSettings: View {
   let model: SettingsViewModel
   @State private var selection: UUID?
-  @State private var pendingFolder: URL?
+  @State private var pendingFolder: PendingFolder?
   @State private var newName = ""
   @State private var removing: RootConfig?
 
@@ -107,7 +107,8 @@ private struct FolderSettings: View {
       }
       .frame(minWidth: 300)
     }
-    .sheet(item: $pendingFolder) { url in
+    .sheet(item: $pendingFolder) { pending in
+      let url = pending.url
       NameSheet(url: url, name: $newName) { confirmed in
         pendingFolder = nil
         guard confirmed else { return }
@@ -136,7 +137,7 @@ private struct FolderSettings: View {
     panel.prompt = "Mirror"
     guard panel.runModal() == .OK, let url = panel.url else { return }
     newName = SettingsViewModel.defaultDisplayName(for: url)
-    pendingFolder = url
+    pendingFolder = PendingFolder(url: url)
   }
 
   private func remove(trash: Bool) {
@@ -147,8 +148,10 @@ private struct FolderSettings: View {
   }
 }
 
-extension URL: @retroactive Identifiable {
-  public var id: String { absoluteString }
+/// A folder picked in the open panel, waiting for the owner to confirm its name.
+private struct PendingFolder: Identifiable {
+  let url: URL
+  var id: URL { url }
 }
 
 private struct NameSheet: View {
