@@ -1,0 +1,6 @@
+GET https://www.googleapis.com/drive/v3/about
+query:
+  fields=user(emailAddress)
+headers:
+  Authorization: Bearer token-1
+body:

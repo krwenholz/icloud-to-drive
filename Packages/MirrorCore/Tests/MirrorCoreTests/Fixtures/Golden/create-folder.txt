@@ -1,0 +1,8 @@
+POST https://www.googleapis.com/drive/v3/files
+query:
+  fields=id,name,mimeType,parents,description,appProperties,modifiedTime
+headers:
+  Authorization: Bearer token-1
+  Content-Type: application/json; charset=UTF-8
+body:
+{"appProperties":{"k":"dirhash","r":"ROOT-UUID","t":"dir"},"description":"Notes / projects/","mimeType":"application/vnd.google-apps.folder","name":"projects","parents":["root-folder"]}

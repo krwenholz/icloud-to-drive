@@ -1,0 +1,10 @@
+PATCH https://www.googleapis.com/drive/v3/files/doc-1
+query:
+  addParents=folder-new
+  fields=id,name,mimeType,parents,description,appProperties,modifiedTime
+  removeParents=folder-old
+headers:
+  Authorization: Bearer token-1
+  Content-Type: application/json; charset=UTF-8
+body:
+{"name":"renamed"}

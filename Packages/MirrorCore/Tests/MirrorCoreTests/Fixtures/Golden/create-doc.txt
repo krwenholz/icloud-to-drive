@@ -1,0 +1,20 @@
+POST https://www.googleapis.com/upload/drive/v3/files
+query:
+  fields=id,name,mimeType,parents,description,appProperties,modifiedTime
+  uploadType=multipart
+headers:
+  Authorization: Bearer token-1
+  Content-Type: multipart/related; boundary=BOUNDARY
+body:
+--BOUNDARY
+Content-Type: application/json; charset=UTF-8
+
+{"appProperties":{"h":"contenthash","k":"pathhash","r":"ROOT-UUID","t":"doc"},"description":"Notes / projects/garden.md","mimeType":"application/vnd.google-apps.document","name":"garden","parents":["parent-1"]}
+--BOUNDARY
+Content-Type: text/markdown; charset=UTF-8
+
+# Garden
+
+- tomatoes
+
+--BOUNDARY--
