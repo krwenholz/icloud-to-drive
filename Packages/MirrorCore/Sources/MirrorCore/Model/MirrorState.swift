@@ -27,10 +27,28 @@ public struct RootState: Codable, Equatable, Sendable {
   /// The last error per file, cleared when the file next syncs. Shown in the UI and status Doc.
   public var failures: [RelativePath: String] = [:]
   public var statusDocID: String?
+  /// Docs replaced under `.replace` whose trash call failed. Retried on every reconcile so they
+  /// don't linger as duplicates.
+  public var orphanedFileIDs: [String] = []
   public var lastSuccessfulSync: Date?
   public var statusDocUpdatedAt: Date?
 
   public init() {}
+
+  public init(from decoder: any Decoder) throws {
+    // Tolerate missing keys so older state files keep loading as fields are added.
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    folderID = try container.decodeIfPresent(String.self, forKey: .folderID)
+    folders = try container.decodeIfPresent([String: String].self, forKey: .folders) ?? [:]
+    files = try container.decodeIfPresent([RelativePath: FileRecord].self, forKey: .files) ?? [:]
+    failures =
+      try container.decodeIfPresent([RelativePath: String].self, forKey: .failures) ?? [:]
+    statusDocID = try container.decodeIfPresent(String.self, forKey: .statusDocID)
+    orphanedFileIDs =
+      try container.decodeIfPresent([String].self, forKey: .orphanedFileIDs) ?? []
+    lastSuccessfulSync = try container.decodeIfPresent(Date.self, forKey: .lastSuccessfulSync)
+    statusDocUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .statusDocUpdatedAt)
+  }
 
   /// The Drive folder that holds files in `directory`; the root folder for top-level files.
   public func folderID(forDirectory directory: String) -> String? {

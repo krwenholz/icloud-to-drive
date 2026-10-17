@@ -5,7 +5,8 @@ import Testing
 
 struct GoogleAuthTests {
   private func makeAuth(
-    refreshToken: String? = "refresh-1", stub: HTTPStub, clock: TestClock = TestClock()
+    refreshToken: String? = "refresh-1", stub: HTTPStub,
+    clock: TestClock = TestClock(start: Date(timeIntervalSince1970: 1_000_000))
   ) -> (GoogleAuth, InMemoryTokenStore, TestClock) {
     let store = InMemoryTokenStore(token: refreshToken)
     let auth = GoogleAuth(
@@ -68,11 +69,11 @@ struct GoogleAuthTests {
         "client_secret": "client-secret",
       ])
 
-    clock.advance(3000)
+    clock.advance(by: 3000)
     #expect(try await auth.accessToken() == "at-1")
     #expect(stub.requests.count == 1)
 
-    clock.advance(541)  // 59s left, inside the 60s margin
+    clock.advance(by: 541)  // 59s left, inside the 60s margin
     #expect(try await auth.accessToken() == "at-2")
     #expect(stub.requests.count == 2)
   }
