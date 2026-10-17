@@ -75,9 +75,12 @@ public protocol DriveClient: Sendable {
     id: String, markdown: Data, description: String, appProperties: [String: String]
   ) async throws -> DriveFile
 
-  /// Renames and/or moves a file. A `nil` name keeps the current one.
-  func moveFile(id: String, name: String?, addParent: String?, removeParent: String?)
-    async throws -> DriveFile
+  /// Renames and/or moves a file, optionally rewriting its description and appProperties so
+  /// they keep pointing at its new path. `nil` leaves a field unchanged.
+  func moveFile(
+    id: String, name: String?, description: String?, appProperties: [String: String]?,
+    addParent: String?, removeParent: String?
+  ) async throws -> DriveFile
 
   /// Moves a file to the trash. The app never deletes permanently.
   func trashFile(id: String) async throws

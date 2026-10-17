@@ -63,14 +63,17 @@ public final class GoogleDriveClient: DriveClient {
       method: "PATCH", url: url, metadata: metadata, markdown: markdown)
   }
 
-  public func moveFile(id: String, name: String?, addParent: String?, removeParent: String?)
-    async throws -> DriveFile
-  {
+  public func moveFile(
+    id: String, name: String?, description: String?, appProperties: [String: String]?,
+    addParent: String?, removeParent: String?
+  ) async throws -> DriveFile {
     var query = ["fields": Self.fileFields]
     if let addParent { query["addParents"] = addParent }
     if let removeParent { query["removeParents"] = removeParent }
     var metadata: [String: Any] = [:]
     if let name { metadata["name"] = name }
+    if let description { metadata["description"] = description }
+    if let appProperties { metadata["appProperties"] = appProperties }
     return try await sendFile(
       method: "PATCH", url: Self.url("\(Self.apiBase)/files/\(Self.escapePath(id))", query),
       json: metadata)

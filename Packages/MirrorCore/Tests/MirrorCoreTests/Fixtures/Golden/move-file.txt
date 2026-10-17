@@ -7,4 +7,4 @@ headers:
   Authorization: Bearer token-1
   Content-Type: application/json; charset=UTF-8
 body:
-{"name":"renamed"}
+{"appProperties":{"h":"contenthash","k":"newpathhash","r":"ROOT-UUID","t":"doc"},"description":"Notes / new/renamed.md","name":"renamed"}

@@ -106,9 +106,10 @@ public actor InMemoryDriveClient: DriveClient {
     return save(item)
   }
 
-  public func moveFile(id: String, name: String?, addParent: String?, removeParent: String?)
-    throws -> DriveFile
-  {
+  public func moveFile(
+    id: String, name: String?, description: String?, appProperties: [String: String]?,
+    addParent: String?, removeParent: String?
+  ) throws -> DriveFile {
     try record(.moveFile(id: id))
     var item = try requireItem(id)
     if let addParent {
@@ -117,6 +118,8 @@ public actor InMemoryDriveClient: DriveClient {
     }
     if let removeParent { item.file.parents.removeAll { $0 == removeParent } }
     if let name { item.file.name = name }
+    if let description { item.file.description = description }
+    if let appProperties { item.file.appProperties = appProperties }
     return save(item)
   }
 

@@ -47,12 +47,16 @@ struct DriveRequestGoldenTests {
 
   @Test func moveFile() async throws {
     _ = try await client.moveFile(
-      id: "doc-1", name: "renamed", addParent: "folder-new", removeParent: "folder-old")
+      id: "doc-1", name: "renamed", description: "Notes / new/renamed.md",
+      appProperties: ["r": "ROOT-UUID", "k": "newpathhash", "h": "contenthash", "t": "doc"],
+      addParent: "folder-new", removeParent: "folder-old")
     try Golden.check(Golden.render(only), named: "move-file")
   }
 
   @Test func renameOnly() async throws {
-    _ = try await client.moveFile(id: "doc-1", name: "renamed", addParent: nil, removeParent: nil)
+    _ = try await client.moveFile(
+      id: "doc-1", name: "renamed", description: nil, appProperties: nil, addParent: nil,
+      removeParent: nil)
     try Golden.check(Golden.render(only), named: "rename-file")
   }
 
