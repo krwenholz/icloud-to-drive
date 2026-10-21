@@ -13,6 +13,7 @@ final class AppModel {
 
   init(paths: AppPaths = AppPaths()) {
     let log = MirrorLog(file: RollingLogFile(url: paths.logFile))
+    let machineName = Host.current().localizedName
     coordinator = SyncCoordinator(
       .init(
         paths: paths, clock: ContinuousClock(),
@@ -20,7 +21,8 @@ final class AppModel {
         makeEngine: { auth, strategy in
           SyncEngine(
             drive: GoogleDriveClient(tokens: auth),
-            stateStore: JSONFileStore(url: paths.stateFile), updateStrategy: strategy)
+            stateStore: JSONFileStore(url: paths.stateFile), updateStrategy: strategy,
+            machineName: machineName)
         },
         lookUpEmail: { auth in try? await GoogleDriveClient(tokens: auth).userEmail() },
         openBrowser: { url in await MainActor.run { _ = NSWorkspace.shared.open(url) } },

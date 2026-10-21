@@ -431,6 +431,62 @@ import Testing
     #expect(await harness.contentCalls(since: start).isEmpty)
   }
 
+  @Test func statusDocSaysWhatTheLastReconcileDid() async throws {
+    defer { harness.cleanUp() }
+    let root = try harness.makeRoot(
+      files: ["edit.md": "one", "gone.md": "two", "move-me.md": "three"])
+    _ = await harness.makeEngine().reconcile(root)
+
+    try harness.write(root, "edit.md", "one, edited")
+    try harness.write(root, "new.md", "four")
+    try harness.remove(root, "gone.md")
+    try harness.move(root, "move-me.md", "moved.md")
+    // Three files need reading (edit.md, new.md, and moved.md at its new path), at three
+    // seconds each on the engine's clock.
+    let engine = harness.makeEngine(
+      strategy: .replace, reader: ClockAdvancingReader(clock: harness.clock, seconds: 3))
+    let report = await engine.reconcile(root)
+
+    #expect(report.changes == .init(created: 1, updated: 1, moved: 1, trashed: 1))
+    #expect(report.duration == 9)
+    let status = try #require(try await harness.docs(engine)["Notes/_sync-status"])
+    #expect(status.contains("- Last sync took: 9 seconds, on Test Mac\n"))
+    #expect(
+      status.contains("- Changed in the last sync: 1 created, 1 updated, 1 moved, 1 trashed\n"))
+    #expect(status.contains("- Files are stored as: Google Docs, converted from Markdown\n"))
+    #expect(status.contains("- Update strategy: replace"))
+  }
+
+  @Test func statusDocListsHeldDeletionsUpToTwentyThenCountsTheRest() async throws {
+    defer { harness.cleanUp() }
+    let files = Dictionary(
+      uniqueKeysWithValues: (0..<40).map { ("n\(String(format: "%02d", $0)).md", "note \($0)") })
+    let root = try harness.makeRoot(files: files)
+    let engine = harness.makeEngine()
+    _ = await engine.reconcile(root)
+
+    for i in 0..<30 { try harness.remove(root, "n\(String(format: "%02d", i)).md") }
+    let report = await engine.reconcile(root)
+
+    #expect(report.heldDeletions == 30)
+    #expect(report.heldPaths.count == 20)
+    #expect(report.heldPaths.first?.value == "n00.md")
+    let status = try #require(try await harness.docs(engine)["Notes/_sync-status"])
+    #expect(status.contains("- Deletions on hold: 30 mirrored files would be trashed"))
+    #expect(status.contains("    - `n19.md`\n    - and 10 more\n"))
+    #expect(!status.contains("`n20.md`"))
+  }
+
+  @Test func statusDocForAPlainRootSaysSo() async throws {
+    defer { harness.cleanUp() }
+    var root = try harness.makeRoot(files: ["a.md": "a"])
+    root.convertToDocs = false
+    let engine = harness.makeEngine()
+    _ = await engine.reconcile(root)
+    let status = try await harness.docs(engine)["Notes/_sync-status"]
+    #expect(status?.contains("plain Markdown files, not converted") == true)
+  }
+
   @Test func capsConcurrentDriveRequests() async throws {
     defer { harness.cleanUp() }
     let files = Dictionary(uniqueKeysWithValues: (0..<12).map { ("n\($0).md", "note \($0)") })

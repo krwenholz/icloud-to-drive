@@ -22,13 +22,14 @@ struct EngineHarness {
   func makeEngine(
     strategy: UpdateStrategy = .inPlace, driveFolderName: String = AppIdentity.driveRootFolderName,
     reader: any FileReading = CoordinatedFileReader(),
-    drive: (any DriveClient)? = nil, maxConcurrentRequests: Int = 4
+    drive: (any DriveClient)? = nil, maxConcurrentRequests: Int = 4,
+    machineName: String? = "Test Mac"
   ) -> SyncEngine {
     let clock = clock
     return SyncEngine(
       drive: drive ?? self.drive, stateStore: JSONFileStore(url: paths.stateFile),
       reader: reader, updateStrategy: strategy, driveFolderName: driveFolderName,
-      maxConcurrentRequests: maxConcurrentRequests,
+      machineName: machineName, maxConcurrentRequests: maxConcurrentRequests,
       now: { clock.now }, timeZone: TimeZone(identifier: "America/Los_Angeles")!,
       locale: Locale(identifier: "en_US_POSIX"))
   }
@@ -112,6 +113,16 @@ final class ScriptedReader: FileReading, Sendable {
     reads.withLock { $0.append(name) }
     if failing.withLock({ $0.contains(name) }) { return .failed("simulated read failure") }
     return await base.read(url)
+  }
+}
+
+/// Moves the test clock forward on every read, to give a reconcile a measurable duration.
+struct ClockAdvancingReader: FileReading {
+  let clock: TestClock
+  let seconds: TimeInterval
+  func read(_ url: URL) async -> FileReadResult {
+    clock.advance(by: seconds)
+    return await CoordinatedFileReader().read(url)
   }
 }
 

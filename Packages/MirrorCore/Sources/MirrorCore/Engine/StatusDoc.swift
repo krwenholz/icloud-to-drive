@@ -13,8 +13,15 @@ public enum StatusDoc {
     public var lastSuccessfulSync: Date
     public var mirroredFiles: Int
     public var failures: [RelativePath: String]
+    /// How many deletions are on hold, which can be more than `heldDeletionPaths` lists.
     public var heldDeletions: Int
+    public var heldDeletionPaths: [RelativePath]
     public var waitingForDownload: Int
+    public var changes: RootSyncReport.ChangeCounts
+    public var duration: TimeInterval
+    public var machineName: String?
+    public var updateStrategy: UpdateStrategy
+    public var convertsToDocs: Bool
   }
 
   public static func markdown(_ content: Content, timeZone: TimeZone, locale: Locale) -> String {
@@ -24,6 +31,7 @@ public enum StatusDoc {
     local.timeZone = timeZone
     local.locale = locale
     let iso = ISO8601DateFormatter()
+    let changes = content.changes
 
     var lines = [
       "# Drive Mirror sync status: \(content.rootName)",
@@ -33,7 +41,18 @@ public enum StatusDoc {
       "",
       "- Last successful sync: \(local.string(from: content.lastSuccessfulSync)) "
         + "(\(iso.string(from: content.lastSuccessfulSync)))",
+      "- Last sync took: \(durationText(content.duration))"
+        + (content.machineName.map { ", on \($0)" } ?? ""),
+      "- Changed in the last sync: \(changes.created) created, \(changes.updated) updated, "
+        + "\(changes.moved) moved, \(changes.trashed) trashed",
       "- Mirrored files: \(content.mirroredFiles)",
+      "- Files are stored as: "
+        + (content.convertsToDocs
+          ? "Google Docs, converted from Markdown" : "plain Markdown files, not converted"),
+      "- Update strategy: "
+        + (content.updateStrategy == .inPlace
+          ? "in place (edits keep the same file, so links to it keep working)"
+          : "replace (each edit makes a new copy and trashes the old one, so links to it change)"),
     ]
     if content.failures.isEmpty {
       lines.append("- Failing files: none")
@@ -53,9 +72,21 @@ public enum StatusDoc {
     }
     if content.heldDeletions > 0 {
       lines.append(
-        "- Deletions on hold: \(content.heldDeletions) Docs would be trashed, which looks like "
-          + "a mistake, so they are kept until the owner confirms.")
+        "- Deletions on hold: \(content.heldDeletions) mirrored files would be trashed, which "
+          + "looks like a mistake, so they are kept until the owner confirms.")
+      for path in content.heldDeletionPaths.prefix(RootSyncReport.maxHeldPaths) {
+        lines.append("    - `\(path.value)`")
+      }
+      let unlisted =
+        content.heldDeletions - min(content.heldDeletionPaths.count, RootSyncReport.maxHeldPaths)
+      if unlisted > 0 { lines.append("    - and \(unlisted) more") }
     }
     return lines.joined(separator: "\n") + "\n"
+  }
+
+  private static func durationText(_ seconds: TimeInterval) -> String {
+    if seconds < 1 { return "under a second" }
+    let whole = Int(seconds.rounded())
+    return "\(whole) second\(whole == 1 ? "" : "s")"
   }
 }

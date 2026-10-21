@@ -2,15 +2,31 @@ import Foundation
 
 /// The outcome of one reconcile of one root.
 public struct RootSyncReport: Equatable, Sendable {
+  /// How many held paths a report (and so the menu and status Doc) carries.
+  public static let maxHeldPaths = 20
+
+  public struct ChangeCounts: Equatable, Sendable {
+    public var created = 0
+    public var updated = 0
+    public var moved = 0
+    public var trashed = 0
+  }
+
   public var rootID: UUID
   public var finishedAt: Date
   /// Drive operations that succeeded.
   public var applied = 0
+  /// What the successful operations did to the Drive copy.
+  public var changes = ChangeCounts()
+  /// How long the reconcile took, by the engine's clock.
+  public var duration: TimeInterval = 0
   /// Files that failed this time, with the reason. They are retried on the next reconcile.
   public var failures: [RelativePath: String] = [:]
   /// Files skipped until iCloud finishes downloading them.
   public var deferred: [RelativePath] = []
   public var heldDeletions = 0
+  /// The first few held paths, so the owner can judge them before applying.
+  public var heldPaths: [RelativePath] = []
   public var attention: SyncPlan.Attention?
   /// A failure that stopped the whole reconcile, such as Drive folder setup failing.
   public var error: String?
@@ -46,6 +62,8 @@ public actor SyncEngine {
   public var updateStrategy: UpdateStrategy
   /// Pushed by the coordinator when the owner edits it; applied by the next reconcile.
   public var driveFolderName: String
+  /// Written into the status Doc, so a reader can tell which Mac last synced.
+  private let machineName: String?
 
   private var loadedState: MirrorState?
   private var queues: [UUID: Task<RootSyncReport, Never>] = [:]
@@ -58,6 +76,7 @@ public actor SyncEngine {
     scanner: FileScanner = FileScanner(),
     updateStrategy: UpdateStrategy = .inPlace,
     driveFolderName: String = AppIdentity.driveRootFolderName,
+    machineName: String? = nil,
     maxConcurrentRequests: Int = 4,
     now: @escaping @Sendable () -> Date = { Date() },
     timeZone: TimeZone = .current,
@@ -69,6 +88,7 @@ public actor SyncEngine {
     self.scanner = scanner
     self.updateStrategy = updateStrategy
     self.driveFolderName = MirrorConfig.normalizedDriveFolderName(driveFolderName)
+    self.machineName = machineName
     self.now = now
     self.timeZone = timeZone
     self.locale = locale
@@ -134,7 +154,8 @@ public actor SyncEngine {
   private func performReconcile(_ root: RootConfig, applyPendingDeletions: Bool) async
     -> RootSyncReport
   {
-    var report = RootSyncReport(rootID: root.id, finishedAt: now())
+    let startedAt = now()
+    var report = RootSyncReport(rootID: root.id, finishedAt: startedAt)
     do {
       if try state().roots[root.id.uuidString] == nil {
         // No state for this root: either it's new or the state file was lost. Drive knows which.
@@ -175,31 +196,32 @@ public actor SyncEngine {
       convertToDocs: root.convertToDocs, allowMassDeletion: applyPendingDeletions)
     report.deferred = plan.deferred.filter { report.failures[$0] == nil }
     report.heldDeletions = plan.heldDeletions.count
+    report.heldPaths = plan.heldDeletions.compactMap(\.path).prefix(RootSyncReport.maxHeldPaths)
+      .map { $0 }
     report.attention = plan.attention
 
     // Folders go one at a time, parents first; each later phase runs concurrently.
     let phases = Dictionary(grouping: plan.operations, by: \.phase).sorted { $0.key < $1.key }
     for (phase, operations) in phases {
+      var results: [OperationResult] = []
       if phase == 0 {
         for operation in operations {
-          await run(operation, root: root, contents: contents, report: &report)
+          results.append(await perform(operation, root: root, contents: contents))
         }
-        continue
-      }
-      let loaded = contents
-      var results: [(RelativePath?, String?)] = []
-      await withTaskGroup(of: (RelativePath?, String?).self) { group in
-        for operation in operations {
-          group.addTask { await self.runConcurrently(operation, root: root, contents: loaded) }
+      } else {
+        let loaded = contents
+        await withTaskGroup(of: OperationResult.self) { group in
+          for operation in operations {
+            group.addTask { await self.perform(operation, root: root, contents: loaded) }
+          }
+          for await result in group { results.append(result) }
         }
-        for await result in group { results.append(result) }
       }
-      for (path, failure) in results {
-        if let path, let failure { report.failures[path] = failure } else { report.applied += 1 }
-      }
+      for result in results { report.record(result) }
     }
 
     report.finishedAt = now()
+    report.duration = report.finishedAt.timeIntervalSince(startedAt)
     finishReconcile(root, report: report, scanned: Set(scan.map(\.path)))
     await refreshStatusDoc(for: root, report: report)
     return report
@@ -209,32 +231,19 @@ public actor SyncEngine {
     scanner.scan(root: root.url, filter: root.filter)
   }
 
-  private func runConcurrently(
-    _ operation: PlannedOperation, root: RootConfig, contents: [RelativePath: PreparedContent]
-  ) async -> (RelativePath?, String?) {
-    var report = RootSyncReport(rootID: root.id, finishedAt: now())
-    await run(operation, root: root, contents: contents, report: &report)
-    return (report.failures.first?.key ?? operation.path, report.failures.first?.value)
-  }
-
   /// Runs one operation, saving state as soon as it succeeds so a crash mid-batch resumes
   /// instead of re-uploading.
-  private func run(
-    _ operation: PlannedOperation, root: RootConfig, contents: [RelativePath: PreparedContent],
-    report: inout RootSyncReport
-  ) async {
+  private func perform(
+    _ operation: PlannedOperation, root: RootConfig, contents: [RelativePath: PreparedContent]
+  ) async -> OperationResult {
     do {
       try await execute(operation, root: root, contents: contents)
-      if operation.phase == 0 { report.applied += 1 }
       if let path = operation.path { try update(root) { $0.failures[path] = nil } }
+      return OperationResult(operation: operation, failure: nil)
     } catch {
       let message = "\(error)"
-      if let path = operation.path {
-        report.failures[path] = message
-        try? update(root) { $0.failures[path] = message }
-      } else {
-        report.error = report.error ?? message
-      }
+      if let path = operation.path { try? update(root) { $0.failures[path] = message } }
+      return OperationResult(operation: operation, failure: message)
     }
   }
 
@@ -496,7 +505,10 @@ public actor SyncEngine {
       StatusDoc.Content(
         rootName: root.displayName, lastSuccessfulSync: report.finishedAt,
         mirroredFiles: rootState.files.count, failures: rootState.failures,
-        heldDeletions: report.heldDeletions, waitingForDownload: report.deferred.count),
+        heldDeletions: report.heldDeletions, heldDeletionPaths: report.heldPaths,
+        waitingForDownload: report.deferred.count, changes: report.changes,
+        duration: report.duration, machineName: machineName, updateStrategy: updateStrategy,
+        convertsToDocs: root.convertToDocs),
       timeZone: timeZone, locale: locale)
     let data = Data(markdown.utf8)
     let description = "\(root.displayName) / \(StatusDoc.name)"
@@ -610,6 +622,34 @@ public actor SyncEngine {
     current[root: root.id] = rebuilt
     try commit(current)
     for id in duplicates { try? await trashIgnoringMissing(id) }
+  }
+}
+
+/// What happened to one planned operation.
+private struct OperationResult: Sendable {
+  var operation: PlannedOperation
+  var failure: String?
+}
+
+extension RootSyncReport {
+  fileprivate mutating func record(_ result: OperationResult) {
+    if let failure = result.failure {
+      // Operations without a file, such as creating a folder, fail the whole reconcile.
+      if let path = result.operation.path {
+        failures[path] = failure
+      } else {
+        error = error ?? failure
+      }
+      return
+    }
+    applied += 1
+    switch result.operation {
+    case .createDoc: changes.created += 1
+    case .updateDoc, .reformatDoc: changes.updated += 1
+    case .moveDoc: changes.moved += 1
+    case .trashDoc: changes.trashed += 1
+    case .createFolder, .recordUnchanged: break
+    }
   }
 }
 
