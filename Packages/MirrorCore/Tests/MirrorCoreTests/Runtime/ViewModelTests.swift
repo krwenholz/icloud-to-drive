@@ -61,6 +61,33 @@ struct MenuViewModelTests {
     #expect(model.accountNotice == nil)
   }
 
+  @Test func showsWhatHeldDeletionsWouldTrash() async {
+    let model = makeModel()
+    let message = "12 of 20 Docs would be trashed. Deletions are on hold."
+    await service.push(
+      signedIn([
+        sampleRoot(
+          "Notes", phase: .needsAttention(message), held: 12,
+          heldPaths: ["a.md", "b.md", "c.md", "d.md"]),
+        sampleRoot(
+          "Plain", phase: .needsAttention(message), held: 1, heldPaths: ["only.md"],
+          convertToDocs: false),
+        sampleRoot(
+          "Few", phase: .needsAttention(message), held: 2, heldPaths: ["x.md", "y.md"]),
+        sampleRoot("NoPaths", phase: .needsAttention(message), held: 12),
+      ]))
+    await model.start()
+
+    #expect(
+      model.rootLines.map(\.detail) == [
+        "Would trash 12 Docs: a.md, b.md, c.md, and 9 more. "
+          + "Choose Apply Pending Deletions if that's right.",
+        "Would trash 1 file: only.md. Choose Apply Pending Deletions if that's right.",
+        "Would trash 2 Docs: x.md and y.md. Choose Apply Pending Deletions if that's right.",
+        message,
+      ])
+  }
+
   @Test func showsAccountNotices() async {
     let model = makeModel()
     var snapshot = MirrorSnapshot()

@@ -467,6 +467,28 @@ final class SnapshotRecorder: @unchecked Sendable {
     await coordinator.stop()
   }
 
+  @Test func snapshotsCarryTheHeldDeletionPaths() async throws {
+    let harness = try CoordinatorHarness()
+    defer { harness.engineHarness.cleanUp() }
+    let files = Dictionary(
+      uniqueKeysWithValues: (0..<40).map { ("n\(String(format: "%02d", $0)).md", "note \($0)") })
+    let root = try harness.engineHarness.makeRoot(files: files)
+    try harness.saveConfig([root])
+    let coordinator = harness.makeCoordinator()
+    let recorder = await SnapshotRecorder(coordinator)
+    await coordinator.start()
+
+    for i in 0..<25 { try harness.engineHarness.remove(root, "n\(String(format: "%02d", i)).md") }
+    await coordinator.syncNow()
+
+    #expect(await eventually { recorder.latest.roots.first?.heldDeletions == 25 })
+    let held = try #require(recorder.latest.roots.first)
+    #expect(held.heldDeletions == 25)
+    #expect(held.heldDeletionPaths.count == 20)
+    #expect(held.heldDeletionPaths.first == "n00.md")
+    await coordinator.stop()
+  }
+
   @Test func diagnosticsIncludeRootsAndLog() async throws {
     let harness = try CoordinatorHarness()
     defer { harness.engineHarness.cleanUp() }

@@ -16,11 +16,15 @@ public struct RootSnapshot: Equatable, Identifiable, Sendable {
   public var lastSuccessfulSync: Date?
   public var mirroredFiles: Int
   public var failingFiles: Int
+  /// How many Docs the mass-deletion guard is holding back.
   public var heldDeletions: Int
+  /// The first few of those, up to `RootSyncReport.maxHeldPaths`, so the owner can judge them.
+  public var heldDeletionPaths: [String]
 
   public init(
     config: RootConfig, phase: RootPhase = .idle, lastSuccessfulSync: Date? = nil,
-    mirroredFiles: Int = 0, failingFiles: Int = 0, heldDeletions: Int = 0
+    mirroredFiles: Int = 0, failingFiles: Int = 0, heldDeletions: Int = 0,
+    heldDeletionPaths: [String] = []
   ) {
     id = config.id
     self.config = config
@@ -29,6 +33,7 @@ public struct RootSnapshot: Equatable, Identifiable, Sendable {
     self.mirroredFiles = mirroredFiles
     self.failingFiles = failingFiles
     self.heldDeletions = heldDeletions
+    self.heldDeletionPaths = heldDeletionPaths
   }
 }
 

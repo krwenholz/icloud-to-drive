@@ -420,6 +420,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
       status.lastSuccessfulSync = stored?.lastSuccessfulSync
       status.failingFiles = report?.failures.count ?? stored?.failures.count ?? 0
       status.heldDeletions = report?.heldDeletions ?? 0
+      status.heldDeletionPaths = report?.heldPaths.map(\.value) ?? []
       status.phase = phase(for: root.id, report: report)
       roots.append(status)
     }

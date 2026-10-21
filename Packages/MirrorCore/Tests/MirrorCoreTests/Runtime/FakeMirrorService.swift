@@ -94,9 +94,12 @@ func eventually(
   return await condition()
 }
 
-func sampleRoot(_ name: String = "Notes", phase: RootPhase = .idle, held: Int = 0) -> RootSnapshot {
+func sampleRoot(
+  _ name: String = "Notes", phase: RootPhase = .idle, held: Int = 0, heldPaths: [String] = [],
+  convertToDocs: Bool = true
+) -> RootSnapshot {
   RootSnapshot(
-    config: RootConfig(displayName: name, path: "/tmp/\(name)"), phase: phase,
-    lastSuccessfulSync: Date(timeIntervalSince1970: 1_800_000_000), mirroredFiles: 12,
-    heldDeletions: held)
+    config: RootConfig(displayName: name, path: "/tmp/\(name)", convertToDocs: convertToDocs),
+    phase: phase, lastSuccessfulSync: Date(timeIntervalSince1970: 1_800_000_000),
+    mirroredFiles: 12, heldDeletions: held, heldDeletionPaths: heldPaths)
 }

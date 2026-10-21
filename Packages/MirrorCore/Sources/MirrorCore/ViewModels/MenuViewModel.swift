@@ -86,13 +86,32 @@ public final class MenuViewModel {
       case .syncing: status = "Syncing…"
       case .needsAttention(let message):
         status = "Needs attention"
-        detail = message
+        detail = heldDeletionsDetail(root) ?? message
       case .error(let message):
         status = "Error"
         detail = message
       }
       return RootLine(id: root.id, title: "\(root.config.displayName): \(status)", detail: detail)
     }
+  }
+
+  /// How many held paths the menu names before saying "and N more".
+  static let namedHeldPaths = 3
+
+  /// Shows what the guard is holding, so the owner can decide before choosing Apply.
+  private func heldDeletionsDetail(_ root: RootSnapshot) -> String? {
+    guard root.heldDeletions > 0, !root.heldDeletionPaths.isEmpty else { return nil }
+    let noun = root.config.convertToDocs ? "Doc" : "file"
+    let count = "\(root.heldDeletions) \(noun)\(root.heldDeletions == 1 ? "" : "s")"
+    let named = Array(root.heldDeletionPaths.prefix(Self.namedHeldPaths))
+    let unnamed = root.heldDeletions - named.count
+    var names = named.joined(separator: ", ")
+    if unnamed > 0 {
+      names += ", and \(unnamed) more"
+    } else if named.count > 1 {
+      names = named.dropLast().joined(separator: ", ") + " and " + named[named.count - 1]
+    }
+    return "Would trash \(count): \(names). Choose Apply Pending Deletions if that's right."
   }
 
   /// Account problems that block syncing, shown above the roots.
