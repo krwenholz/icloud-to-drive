@@ -21,6 +21,9 @@ public struct FileRecord: Codable, Equatable, Sendable {
 public struct RootState: Codable, Equatable, Sendable {
   /// The root's own folder under `iCloud Mirror`.
   public var folderID: String?
+  /// The name `folderID` was last given. `nil` (state from before this was tracked, or just
+  /// rebuilt without a name) means the next reconcile renames it to be safe.
+  public var folderName: String?
   /// Drive folder IDs for mirrored subdirectories, keyed by directory path relative to the root.
   public var folders: [String: String] = [:]
   public var files: [RelativePath: FileRecord] = [:]
@@ -39,6 +42,7 @@ public struct RootState: Codable, Equatable, Sendable {
     // Tolerate missing keys so older state files keep loading as fields are added.
     let container = try decoder.container(keyedBy: CodingKeys.self)
     folderID = try container.decodeIfPresent(String.self, forKey: .folderID)
+    folderName = try container.decodeIfPresent(String.self, forKey: .folderName)
     folders = try container.decodeIfPresent([String: String].self, forKey: .folders) ?? [:]
     files = try container.decodeIfPresent([RelativePath: FileRecord].self, forKey: .files) ?? [:]
     failures =

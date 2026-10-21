@@ -84,11 +84,24 @@ public final class SettingsViewModel {
       errorMessage = "\(url.path) is already being mirrored."
       return
     }
+    if let message = nameConflict(name, excluding: nil) {
+      errorMessage = message
+      return
+    }
     await perform { try await self.service.addRoot(at: url, displayName: name) }
   }
 
   public func removeRoot(_ id: UUID, trashDriveFolder: Bool) async {
     await perform { try await self.service.removeRoot(id, trashDriveFolder: trashDriveFolder) }
+  }
+
+  /// Two roots with one name would share a Drive folder name, which makes them
+  /// indistinguishable in Drive.
+  private func nameConflict(_ name: String, excluding id: UUID?) -> String? {
+    let taken = roots.contains {
+      $0.id != id && $0.displayName.compare(name, options: .caseInsensitive) == .orderedSame
+    }
+    return taken ? "Another folder is already named “\(name)”. Choose a different name." : nil
   }
 
   /// Patterns are edited as text, one per line. Blank lines are ignored.
@@ -117,6 +130,10 @@ public final class SettingsViewModel {
   public func rename(_ id: UUID, to name: String) async {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard var root = roots.first(where: { $0.id == id }), !trimmed.isEmpty else { return }
+    if let message = nameConflict(trimmed, excluding: id) {
+      errorMessage = message
+      return
+    }
     root.displayName = trimmed
     await perform { try await self.service.updateRoot(root) }
   }

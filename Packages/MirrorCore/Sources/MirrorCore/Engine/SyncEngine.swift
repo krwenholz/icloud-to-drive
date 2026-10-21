@@ -386,7 +386,17 @@ public actor SyncEngine {
 
   private func ensureFolders(for root: RootConfig) async throws {
     let mirrorFolderID = try await ensureMirrorFolder()
-    if try state()[root: root.id].folderID == nil {
+    let rootState = try state()[root: root.id]
+    if let folderID = rootState.folderID {
+      if rootState.folderName != root.displayName {
+        // The owner renamed the root; keep the same folder so Doc links and IDs survive.
+        _ = try await drive.moveFile(
+          id: folderID, name: root.displayName,
+          description: DriveDescription.rootFolder(rootName: root.displayName),
+          appProperties: nil, addParent: nil, removeParent: nil)
+        try update(root) { $0.folderName = root.displayName }
+      }
+    } else {
       let folder = try await drive.createFolder(
         name: root.displayName, parentID: mirrorFolderID,
         description: DriveDescription.rootFolder(rootName: root.displayName),
@@ -394,7 +404,10 @@ public actor SyncEngine {
           AppPropertyKey.root: root.id.uuidString,
           AppPropertyKey.kind: DriveItemKind.rootFolder.rawValue,
         ])
-      try update(root) { $0.folderID = folder.id }
+      try update(root) {
+        $0.folderID = folder.id
+        $0.folderName = root.displayName
+      }
     }
   }
 
@@ -538,7 +551,9 @@ public actor SyncEngine {
 
     var rebuilt = RootState()
     var duplicates: [String] = []
-    rebuilt.folderID = files.filter { kind($0) == .rootFolder }.sorted(by: newestFirst).first?.id
+    let rootFolder = files.filter { kind($0) == .rootFolder }.sorted(by: newestFirst).first
+    rebuilt.folderID = rootFolder?.id
+    rebuilt.folderName = rootFolder?.name
 
     let statusDocs = files.filter { kind($0) == .statusDoc }.sorted(by: newestFirst)
     rebuilt.statusDocID = statusDocs.first?.id

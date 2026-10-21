@@ -389,6 +389,47 @@ import Testing
     #expect(await harness.contentCalls(since: start).isEmpty)
   }
 
+  @Test func renamingARootRenamesItsDriveFolder() async throws {
+    defer { harness.cleanUp() }
+    let root = try harness.makeRoot("Notes", files: ["a.md": "a", "sub/b.md": "b"])
+    let engine = harness.makeEngine()
+    _ = await engine.reconcile(root)
+    let folderID = try #require(await engine.status(of: root.id).driveFolderID)
+    let docID = try await harness.docID(engine, "Notes/sub/b")
+
+    var renamed = root
+    renamed.displayName = "Journal"
+    let report = await engine.reconcile(renamed)
+
+    #expect(report.completed)
+    #expect(await engine.status(of: root.id).driveFolderID == folderID)
+    let folder = try #require(await harness.drive.item(folderID))
+    #expect(folder.file.name == "Journal")
+    #expect(folder.file.description == "Journal /")
+    #expect(
+      try await harness.tree(engine) == [
+        "Journal/", "Journal/_sync-status", "Journal/a", "Journal/sub/", "Journal/sub/b",
+      ])
+    #expect(try await harness.docID(engine, "Journal/sub/b") == docID)
+
+    // The applied name is remembered, so an unchanged root isn't renamed again.
+    let start = await harness.drive.calls.count
+    _ = await engine.reconcile(renamed)
+    #expect(await harness.contentCalls(since: start).isEmpty)
+  }
+
+  @Test func rebuiltStateRecordsTheFolderNameSoItIsNotRenamedNeedlessly() async throws {
+    defer { harness.cleanUp() }
+    let root = try harness.makeRoot("Notes", files: ["a.md": "a"])
+    _ = await harness.makeEngine().reconcile(root)
+    try FileManager.default.removeItem(at: harness.paths.stateFile)
+
+    let start = await harness.drive.calls.count
+    _ = await harness.makeEngine().reconcile(root)
+
+    #expect(await harness.contentCalls(since: start).isEmpty)
+  }
+
   @Test func capsConcurrentDriveRequests() async throws {
     defer { harness.cleanUp() }
     let files = Dictionary(uniqueKeysWithValues: (0..<12).map { ("n\($0).md", "note \($0)") })

@@ -153,6 +153,30 @@ struct SettingsViewModelTests {
     #expect(await service.calls.isEmpty)
   }
 
+  @Test func rejectsDisplayNamesAnotherRootAlreadyUses() async {
+    let model = SettingsViewModel(service: service, loginItem: loginItem)
+    let notes = sampleRoot("Notes")
+    let journal = sampleRoot("Journal")
+    var snapshot = MirrorSnapshot()
+    snapshot.roots = [notes, journal]
+    await service.push(snapshot)
+    await model.start()
+
+    await model.addRoot(URL(filePath: "/tmp/Elsewhere"), displayName: " notes ")
+    #expect(
+      model.errorMessage == "Another folder is already named “notes”. Choose a different name.")
+    await model.rename(journal.id, to: "NOTES")
+    #expect(model.errorMessage?.hasPrefix("Another folder is already named") == true)
+    #expect(await service.calls.isEmpty)
+
+    // Changing only the case of its own name is fine, and clears the error.
+    await model.rename(notes.id, to: "NOTES")
+    var expected = notes.config
+    expected.displayName = "NOTES"
+    #expect(await service.calls == [.updateRoot(expected)])
+    #expect(model.errorMessage == nil)
+  }
+
   @Test func editsPatterns() async throws {
     let model = SettingsViewModel(service: service, loginItem: loginItem)
     let root = sampleRoot()
