@@ -14,10 +14,13 @@ public struct DriveFile: Equatable, Sendable {
   public var description: String?
   public var appProperties: [String: String]
   public var modifiedTime: Date?
+  /// In the trash, either itself or through a trashed parent folder.
+  public var trashed: Bool
 
   public init(
     id: String, name: String, mimeType: String, parents: [String] = [],
-    description: String? = nil, appProperties: [String: String] = [:], modifiedTime: Date? = nil
+    description: String? = nil, appProperties: [String: String] = [:], modifiedTime: Date? = nil,
+    trashed: Bool = false
   ) {
     self.id = id
     self.name = name
@@ -26,6 +29,7 @@ public struct DriveFile: Equatable, Sendable {
     self.description = description
     self.appProperties = appProperties
     self.modifiedTime = modifiedTime
+    self.trashed = trashed
   }
 
   public var isFolder: Bool { mimeType == Self.folderMimeType }
@@ -85,6 +89,10 @@ public protocol DriveClient: Sendable {
     id: String, name: String?, description: String?, appProperties: [String: String]?,
     addParent: String?, removeParent: String?
   ) async throws -> DriveFile
+
+  /// One file's current state, including whether it has been trashed. Throws a 404 for a file
+  /// that no longer exists at all.
+  func getFile(id: String) async throws -> DriveFile
 
   /// Moves a file to the trash. The app never deletes permanently.
   func trashFile(id: String) async throws

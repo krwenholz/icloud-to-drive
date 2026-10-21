@@ -12,7 +12,7 @@ struct DriveResponseTests {
 
   static let ok = HTTPStub.Response.json(
     200,
-    #"{"id":"f1","name":"garden","mimeType":"application/vnd.google-apps.document","parents":["p"],"appProperties":{"h":"x"},"modifiedTime":"2026-10-16T12:00:00.123Z"}"#
+    #"{"id":"f1","name":"garden","mimeType":"application/vnd.google-apps.document","parents":["p"],"appProperties":{"h":"x"},"modifiedTime":"2026-10-16T12:00:00.123Z","trashed":true}"#
   )
 
   init() {
@@ -40,6 +40,7 @@ struct DriveResponseTests {
     #expect(file.appProperties == ["h": "x"])
     #expect(file.modifiedTime == GoogleDriveClient.parseDate("2026-10-16T12:00:00.123Z"))
     #expect(file.modifiedTime != nil)
+    #expect(file.trashed)
   }
 
   @Test func refreshesTokenOnceAfter401() async throws {

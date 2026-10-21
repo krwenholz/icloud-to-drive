@@ -1,6 +1,6 @@
 GET https://www.googleapis.com/drive/v3/files
 query:
-  fields=nextPageToken,files(id,name,mimeType,parents,description,appProperties,modifiedTime)
+  fields=nextPageToken,files(id,name,mimeType,parents,description,appProperties,modifiedTime,trashed)
   pageSize=1000
   q=appProperties has { key='r' and value='11111111-2222-3333-4444-555555555555' } and trashed=false
   spaces=drive

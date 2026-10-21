@@ -449,7 +449,12 @@ public actor SyncEngine {
 
   private func ensureFolders(for root: RootConfig) async throws {
     let mirrorFolderID = try await ensureMirrorFolder()
-    let rootState = try state()[root: root.id]
+    var rootState = try state()[root: root.id]
+    if let cached = rootState.folderID, try await isTrashedOrGone(cached) {
+      // Same recovery, for a single root whose folder was trashed.
+      try update(root) { $0.forgetDriveItems() }
+      rootState = try state()[root: root.id]
+    }
     if let folderID = rootState.folderID {
       if rootState.folderName != root.displayName {
         // The owner renamed the root; keep the same folder so Doc links and IDs survive.
@@ -474,6 +479,18 @@ public actor SyncEngine {
     }
   }
 
+  /// Whether a cached folder has been trashed or deleted since we last used it. Other errors
+  /// propagate: a flaky network must not look like the owner emptying their Drive.
+  private func isTrashedOrGone(_ id: String) async throws -> Bool {
+    do {
+      return try await drive.getFile(id: id).trashed
+    } catch DriveError.http(status: 404, _, _) {
+      return true
+    } catch DriveError.notFound {
+      return true
+    }
+  }
+
   /// Finds or creates the mirror folder and gives it the configured name. Roots reconciling at
   /// the same time share one attempt, or each would create its own folder.
   private func ensureMirrorFolder() async throws -> String {
@@ -487,6 +504,14 @@ public actor SyncEngine {
   private func prepareMirrorFolder() async throws -> String {
     let wanted = driveFolderName
     var current = try state()
+    if let cached = current.mirrorFolderID, try await isTrashedOrGone(cached) {
+      // The owner trashed the whole mirror. Everything cached under it is in the trash too, so
+      // forget it all and let this reconcile build a fresh tree without duplicating anything.
+      current.mirrorFolderID = nil
+      current.mirrorFolderName = nil
+      for key in current.roots.keys { current.roots[key]?.forgetDriveItems() }
+      try commit(current)
+    }
     var folderID = current.mirrorFolderID
     var folderName = current.mirrorFolderName
     if folderID == nil {

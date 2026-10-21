@@ -5,7 +5,7 @@ public final class GoogleDriveClient: DriveClient {
   static let apiBase = "https://www.googleapis.com/drive/v3"
   static let uploadBase = "https://www.googleapis.com/upload/drive/v3"
   /// Only what `DriveFile` holds, to keep responses small.
-  static let fileFields = "id,name,mimeType,parents,description,appProperties,modifiedTime"
+  static let fileFields = "id,name,mimeType,parents,description,appProperties,modifiedTime,trashed"
 
   private let session: URLSession
   private let tokens: any AccessTokenProvider
@@ -81,6 +81,13 @@ public final class GoogleDriveClient: DriveClient {
       json: metadata)
   }
 
+  public func getFile(id: String) async throws -> DriveFile {
+    let url = Self.url(
+      "\(Self.apiBase)/files/\(Self.escapePath(id))", ["fields": Self.fileFields])
+    return try Self.decode(FileResource.self, from: try await send(method: "GET", url: url))
+      .driveFile
+  }
+
   public func trashFile(id: String) async throws {
     _ = try await sendFile(
       method: "PATCH",
@@ -120,13 +127,6 @@ public final class GoogleDriveClient: DriveClient {
   }
 
   // MARK: - Probe helpers (not needed by the engine)
-
-  public func getFile(id: String) async throws -> DriveFile {
-    let url = Self.url(
-      "\(Self.apiBase)/files/\(Self.escapePath(id))", ["fields": Self.fileFields])
-    return try Self.decode(FileResource.self, from: try await send(method: "GET", url: url))
-      .driveFile
-  }
 
   /// Exports a Google Doc back to Markdown, to eyeball conversion quality.
   public func exportMarkdown(id: String) async throws -> String {
@@ -242,12 +242,13 @@ public final class GoogleDriveClient: DriveClient {
     var description: String?
     var appProperties: [String: String]?
     var modifiedTime: String?
+    var trashed: Bool?
 
     var driveFile: DriveFile {
       DriveFile(
         id: id, name: name ?? "", mimeType: mimeType ?? "", parents: parents ?? [],
         description: description, appProperties: appProperties ?? [:],
-        modifiedTime: modifiedTime.flatMap(GoogleDriveClient.parseDate))
+        modifiedTime: modifiedTime.flatMap(GoogleDriveClient.parseDate), trashed: trashed ?? false)
     }
   }
 

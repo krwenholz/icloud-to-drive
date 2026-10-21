@@ -487,6 +487,102 @@ import Testing
     #expect(status?.contains("plain Markdown files, not converted") == true)
   }
 
+  // MARK: - The owner trashes folders in Drive
+
+  /// Names and contents of everything the owner would see under the mirror folder.
+  private func snapshot(_ engine: SyncEngine) async throws -> [String: String] {
+    try await harness.docs(engine)
+  }
+
+  @Test func trashedRootFolderIsRecreatedWithoutDuplicates() async throws {
+    defer { harness.cleanUp() }
+    let root = try harness.makeRoot(files: ["a.md": "a", "sub/b.md": "b", "sub/deep/c.md": "c"])
+    let engine = harness.makeEngine()
+    _ = await engine.reconcile(root)
+    let treeBefore = try await harness.tree(engine)
+    let docsBefore = try await snapshot(engine)
+    let oldFolder = try #require(await engine.status(of: root.id).driveFolderID)
+    let oldDoc = try await harness.docID(engine, "Notes/sub/b")
+
+    await harness.drive.trash(oldFolder)
+    let report = await engine.reconcile(root)
+
+    #expect(report.completed)
+    #expect(report.failures.isEmpty)
+    #expect(report.attention == nil)
+    #expect(report.changes.created == 3)
+    #expect(report.changes.trashed == 0)
+    #expect(await engine.status(of: root.id).driveFolderID != oldFolder)
+    #expect(try await harness.tree(engine) == treeBefore)
+    #expect(try await snapshot(engine) == docsBefore)
+    #expect(try await harness.docID(engine, "Notes/sub/b") != oldDoc)
+    // Everything in the old tree stays in the trash, and nothing was trashed by us.
+    #expect(await harness.drive.item(oldDoc)?.trashed == true)
+    #expect(await harness.drive.untrashedCount(named: "b") == 1)
+    #expect(await engine.reconcile(root).applied == 0)
+  }
+
+  @Test func trashedMirrorFolderIsRecreatedForEveryRoot() async throws {
+    defer { harness.cleanUp() }
+    let notes = try harness.makeRoot("Notes", files: ["a.md": "a", "sub/b.md": "b"])
+    let journal = try harness.makeRoot("Journal", files: ["day.md": "today"])
+    let engine = harness.makeEngine()
+    _ = await engine.reconcile(notes)
+    _ = await engine.reconcile(journal)
+    let treeBefore = try await harness.tree(engine)
+    let oldMirror = try #require(await engine.mirrorFolderID())
+
+    await harness.drive.trash(oldMirror)
+    let first = await engine.reconcile(notes)
+    let second = await engine.reconcile(journal)
+
+    #expect(first.completed && second.completed)
+    #expect(first.failures.isEmpty && second.failures.isEmpty)
+    #expect(await engine.mirrorFolderID() != oldMirror)
+    #expect(try await harness.tree(engine) == treeBefore)
+    #expect(try await harness.docs(engine)["Journal/day"] == "today")
+    let mirrors = await harness.drive.items.values.filter {
+      $0.file.appProperties["t"] == "mirror" && !$0.trashed
+    }
+    #expect(mirrors.count == 1)
+    #expect(await harness.drive.untrashedCount(named: "day") == 1)
+  }
+
+  @Test func aFolderThatNoLongerExistsIsRecreatedToo() async throws {
+    defer { harness.cleanUp() }
+    let root = try harness.makeRoot(files: ["a.md": "a"])
+    let engine = harness.makeEngine()
+    _ = await engine.reconcile(root)
+    let folder = try #require(await engine.status(of: root.id).driveFolderID)
+    await harness.drive.failNext(
+      with: .http(status: 404, reason: "notFound", message: "gone"),
+      where: { $0 == .getFile(id: folder) })
+
+    let report = await engine.reconcile(root)
+
+    #expect(report.completed)
+    #expect(await engine.status(of: root.id).driveFolderID != folder)
+    #expect(try await harness.tree(engine) == ["Notes/", "Notes/_sync-status", "Notes/a"])
+  }
+
+  @Test func aFlakyLookupKeepsTheCachedFolders() async throws {
+    defer { harness.cleanUp() }
+    let root = try harness.makeRoot(files: ["a.md": "a"])
+    let engine = harness.makeEngine()
+    _ = await engine.reconcile(root)
+    let folder = try #require(await engine.status(of: root.id).driveFolderID)
+    await harness.drive.failNext(where: { $0 == .getFile(id: folder) })
+
+    let failed = await engine.reconcile(root)
+    #expect(failed.error != nil)
+    #expect(await engine.status(of: root.id).driveFolderID == folder)
+
+    let retried = await engine.reconcile(root)
+    #expect(retried.completed)
+    #expect(await engine.status(of: root.id).driveFolderID == folder)
+    #expect(await engine.status(of: root.id).mirroredFiles == 1)
+  }
+
   @Test func capsConcurrentDriveRequests() async throws {
     defer { harness.cleanUp() }
     let files = Dictionary(uniqueKeysWithValues: (0..<12).map { ("n\($0).md", "note \($0)") })
@@ -554,6 +650,9 @@ actor ConcurrencyProbeDrive: DriveClient {
         id: id, name: name, description: description, appProperties: appProperties,
         addParent: addParent, removeParent: removeParent)
     }
+  }
+  func getFile(id: String) async throws -> DriveFile {
+    try await track { try await base.getFile(id: id) }
   }
   func trashFile(id: String) async throws { try await track { try await base.trashFile(id: id) } }
   func listFiles(appProperty key: String, value: String) async throws -> [DriveFile] {

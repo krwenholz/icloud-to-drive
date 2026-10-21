@@ -23,6 +23,29 @@ struct InMemoryDriveClientTests {
     }
   }
 
+  @Test func getFileReturnsTrashedItemsAndTrashingAFolderTrashesItsContents() async throws {
+    let drive = InMemoryDriveClient()
+    let top = try await drive.createFolder(
+      name: "top", parentID: nil, description: nil, appProperties: [:])
+    let sub = try await drive.createFolder(
+      name: "sub", parentID: top.id, description: nil, appProperties: [:])
+    let doc = try await drive.createFile(
+      markdown: Data(), name: "a", parentID: sub.id, description: "", appProperties: [:],
+      convert: true)
+    #expect(try await drive.getFile(id: doc.id).trashed == false)
+
+    try await drive.trashFile(id: top.id)
+
+    #expect(try await drive.getFile(id: top.id).trashed)
+    #expect(try await drive.getFile(id: doc.id).trashed)
+    #expect(try await drive.listFiles(appProperty: "r", value: "x").isEmpty)
+    await #expect(
+      throws: DriveError.http(status: 404, reason: "notFound", message: "File not found: nope")
+    ) {
+      try await drive.getFile(id: "nope")
+    }
+  }
+
   @Test func injectsFailuresOnMatchingCalls() async throws {
     let drive = InMemoryDriveClient()
     let top = try await drive.createFolder(

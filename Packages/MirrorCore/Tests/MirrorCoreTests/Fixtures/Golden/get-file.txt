@@ -1,0 +1,6 @@
+GET https://www.googleapis.com/drive/v3/files/folder-1
+query:
+  fields=id,name,mimeType,parents,description,appProperties,modifiedTime,trashed
+headers:
+  Authorization: Bearer token-1
+body:

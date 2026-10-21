@@ -70,6 +70,11 @@ struct DriveRequestGoldenTests {
     try Golden.check(Golden.render(only), named: "rename-file")
   }
 
+  @Test func getFile() async throws {
+    _ = try await client.getFile(id: "folder-1")
+    try Golden.check(Golden.render(only), named: "get-file")
+  }
+
   @Test func trashFile() async throws {
     try await client.trashFile(id: "doc-1")
     try Golden.check(Golden.render(only), named: "trash-file")

@@ -79,13 +79,13 @@ struct EngineHarness {
     return try #require(await drive.tree(under: mirror)[path]).file.id
   }
 
-  /// Calls that changed Drive content, ignoring listings and the status Doc.
+  /// Calls that changed Drive content, ignoring listings, lookups, and the status Doc.
   func contentCalls(since start: Int = 0) async -> [InMemoryDriveClient.Call] {
     let calls = await drive.calls.dropFirst(start)
     var result: [InMemoryDriveClient.Call] = []
     for call in calls {
       switch call {
-      case .listFiles, .userEmail: continue
+      case .listFiles, .userEmail, .getFile: continue
       case .createFile(name: StatusDoc.name): continue
       case .updateFile(let id):
         if await drive.item(id)?.file.name == StatusDoc.name { continue }

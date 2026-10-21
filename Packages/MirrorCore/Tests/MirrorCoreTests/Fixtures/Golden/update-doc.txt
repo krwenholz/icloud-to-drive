@@ -1,6 +1,6 @@
 PATCH https://www.googleapis.com/upload/drive/v3/files/doc-1
 query:
-  fields=id,name,mimeType,parents,description,appProperties,modifiedTime
+  fields=id,name,mimeType,parents,description,appProperties,modifiedTime,trashed
   uploadType=multipart
 headers:
   Authorization: Bearer token-1

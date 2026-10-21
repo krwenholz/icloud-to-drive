@@ -121,6 +121,17 @@ public struct RootState: Codable, Equatable, Sendable {
     statusDocUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .statusDocUpdatedAt)
   }
 
+  /// Forgets every cached Drive ID, for when the owner trashed the folder they lived in. The
+  /// next reconcile recreates the tree from the local files. Failures and sync history stay.
+  mutating func forgetDriveItems() {
+    folderID = nil
+    folderName = nil
+    folders = [:]
+    files = [:]
+    statusDocID = nil
+    statusDocUpdatedAt = nil
+  }
+
   /// The Drive folder that holds files in `directory`; the root folder for top-level files.
   public func folderID(forDirectory directory: String) -> String? {
     directory.isEmpty ? folderID : folders[directory]

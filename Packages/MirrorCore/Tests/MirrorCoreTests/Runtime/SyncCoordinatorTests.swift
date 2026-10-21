@@ -62,6 +62,10 @@ struct AuthCheckingDrive: DriveClient {
       id: id, name: name, description: description, appProperties: appProperties,
       addParent: addParent, removeParent: removeParent)
   }
+  func getFile(id: String) async throws -> DriveFile {
+    try await check()
+    return try await base.getFile(id: id)
+  }
   func trashFile(id: String) async throws {
     try await check()
     try await base.trashFile(id: id)

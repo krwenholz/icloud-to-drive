@@ -15,6 +15,7 @@ public actor InMemoryDriveClient: DriveClient {
     case createFile(name: String)
     case updateFile(id: String)
     case moveFile(id: String)
+    case getFile(id: String)
     case trashFile(id: String)
     case listFiles
     case userEmail
@@ -45,6 +46,18 @@ public actor InMemoryDriveClient: DriveClient {
   }
 
   public func item(_ id: String) -> Item? { items[id] }
+
+  /// Trashes a file as the owner would in the Drive web UI, without recording a client call.
+  public func trash(_ id: String) {
+    let before = calls.count
+    try? trashFile(id: id)
+    calls.removeSubrange(before...)
+  }
+
+  /// Untrashed files and folders with this name, anywhere in the Drive.
+  public func untrashedCount(named name: String) -> Int {
+    items.values.filter { !$0.trashed && $0.file.name == name }.count
+  }
 
   public func setEmail(_ email: String?) { self.email = email }
 
@@ -124,11 +137,30 @@ public actor InMemoryDriveClient: DriveClient {
     return save(item)
   }
 
+  /// Unlike the other calls, this also returns trashed items, as Drive does.
+  public func getFile(id: String) throws -> DriveFile {
+    try record(.getFile(id: id))
+    guard var item = items[id] else {
+      throw DriveError.http(status: 404, reason: "notFound", message: "File not found: \(id)")
+    }
+    item.file.trashed = item.trashed
+    return item.file
+  }
+
+  /// Trashing a folder trashes everything under it too, like Drive.
   public func trashFile(id: String) throws {
     try record(.trashFile(id: id))
     var item = try requireItem(id)
     item.trashed = true
     _ = save(item)
+    var pending = [id]
+    while let parent = pending.popLast() {
+      for var child in items.values where child.file.parents.contains(parent) && !child.trashed {
+        child.trashed = true
+        _ = save(child)
+        pending.append(child.file.id)
+      }
+    }
   }
 
   public func listFiles(appProperty key: String, value: String) throws -> [DriveFile] {

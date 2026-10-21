@@ -90,6 +90,9 @@ struct LimitedDriveClient: DriveClient {
     }
   }
 
+  func getFile(id: String) async throws -> DriveFile {
+    try await limiter.run { try await base.getFile(id: id) }
+  }
   func trashFile(id: String) async throws {
     try await limiter.run { try await base.trashFile(id: id) }
   }
