@@ -4,8 +4,8 @@ A personal macOS 14+ menu bar app that mirrors Markdown folders from iCloud Driv
 
 Sync is strictly one-way. iCloud is the source of truth. Drive holds a derived, disposable copy under a top-level `iCloud Mirror` folder, with one subfolder per root. Nothing flows back.
 
-- It reconciles fully on launch, on wake, hourly, and when files change (debounced). Sync Now in the menu runs one on demand.
-- Each root folder gets a `_sync-status` Doc with the last successful sync time, the mirrored-file count, and any failing files.
+- It reconciles fully on launch, on wake, on a timer (hourly by default; see Settings → General), and when files change (debounced). Sync Now in the menu runs one on demand.
+- Each root folder gets a `_sync-status` Doc with the last successful sync time, how long it took and on which Mac, what it created, updated, moved, and trashed, the mirrored-file count, the file format and update strategy, any failing files (with the date each started failing), and any deletions on hold.
 - It requests only the `drive.file` scope, so the app can see only files it created.
 - It never permanently deletes. It only trashes.
 
@@ -91,7 +91,7 @@ The app lives in the menu bar and has no Dock icon. The icon shows one of four s
 Menu items:
 
 - Last sync time, shown as a relative time
-- One line per root, with its status or error
+- One line per root, with its status or error. When the mass-deletion guard is holding deletions, the line names the first few files and counts the rest.
 - Sync Now
 - Pause / Resume
 - Apply pending deletions (shown only when the mass-deletion guard is holding deletions)
@@ -103,8 +103,20 @@ Menu items:
 Settings has three tabs:
 
 - **Account**: sign in or out, see the signed-in email, and Import client file…
-- **Folders**: add a folder with the folder picker (the display name defaults to the folder name), or remove one. Removing asks whether to also trash the Drive folder. You can edit the include and exclude patterns, one per line. Defaults include `**/*.md` and exclude `.trash/` and `.obsidian/`. Hidden files and folders are always excluded. Patterns support `*`, `**`, and `?`, and match case-insensitively.
-- **General**: launch at login, and the update strategy, In place or Replace.
+- **Folders**: add a folder with the folder picker (the display name defaults to the folder name), or remove one. Removing asks whether to also trash the Drive folder. Display names must be unique across folders, ignoring case. Renaming a folder renames its Drive folder too, keeping the same folder and Doc links. "Convert to Google Docs" is on by default; turn it off to upload plain `.md` files that keep their extension. Changing it re-creates every file in that folder in the new format and trashes the old copies, and the `_sync-status` Doc stays a Doc either way. You can edit the include and exclude patterns, one per line. Defaults include `**/*.md` and exclude `.trash/` and `.obsidian/`. Hidden files and folders are always excluded. Patterns support `*`, `**`, and `?`, and match case-insensitively.
+- **General**: launch at login, the name of the top-level Drive folder (empty means `iCloud Mirror`; changing it renames the existing folder), how often the full pass runs (15 minutes, 1 hour, or 6 hours; changes to files still sync within seconds), and the update strategy, In place or Replace.
+
+### Notifications
+
+The app asks for permission to show alerts at launch and sends one when a problem first appears: a folder with failing files (one notification per folder, not per file), deletions put on hold, an expired Google sign-in, or a folder it can't reach. It doesn't repeat a notification until the problem has cleared and come back, and it never notifies about successful syncs. If you decline the permission, the menu bar icon and menu still show every problem.
+
+### Errors that don't go away
+
+A file that has been failing for more than 30 days and hasn't changed since stops being retried, and disappears from the menu count and the `_sync-status` Doc. Editing the file retries it, and so does Sync Now.
+
+### If you trash the Drive folders
+
+If you trash a root's folder, or the top-level folder, in Drive, the next sync notices and recreates the tree from your local files. The old copies stay in Drive's trash.
 
 ## Troubleshooting
 
