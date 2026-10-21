@@ -38,18 +38,46 @@ public struct RootConfig: Codable, Equatable, Identifiable, Sendable {
   public var url: URL { URL(filePath: path, directoryHint: .isDirectory) }
 }
 
+/// How often every root is reconciled in full, as a safety net behind the file watcher.
+public enum FullSyncInterval: String, Codable, CaseIterable, Sendable {
+  case fifteenMinutes
+  case oneHour
+  case sixHours
+
+  public static let `default` = FullSyncInterval.oneHour
+
+  public var duration: Duration {
+    switch self {
+    case .fifteenMinutes: .seconds(15 * 60)
+    case .oneHour: .seconds(60 * 60)
+    case .sixHours: .seconds(6 * 60 * 60)
+    }
+  }
+
+  public var title: String {
+    switch self {
+    case .fifteenMinutes: "15 minutes"
+    case .oneHour: "1 hour"
+    case .sixHours: "6 hours"
+    }
+  }
+}
+
 public struct MirrorConfig: Codable, Equatable, Sendable {
   public var roots: [RootConfig] = []
   public var updateStrategy: UpdateStrategy = .inPlace
   public var isPaused = false
   /// The name of the top-level Drive folder that holds every root's mirror.
   public var driveFolderName = AppIdentity.driveRootFolderName
+  public var fullSyncInterval = FullSyncInterval.default
 
   public init(
     roots: [RootConfig] = [], updateStrategy: UpdateStrategy = .inPlace,
-    driveFolderName: String = AppIdentity.driveRootFolderName
+    driveFolderName: String = AppIdentity.driveRootFolderName,
+    fullSyncInterval: FullSyncInterval = .default
   ) {
     self.roots = roots
+    self.fullSyncInterval = fullSyncInterval
     self.updateStrategy = updateStrategy
     self.driveFolderName = Self.normalizedDriveFolderName(driveFolderName)
   }
@@ -67,6 +95,10 @@ public struct MirrorConfig: Codable, Equatable, Sendable {
     updateStrategy =
       try container.decodeIfPresent(UpdateStrategy.self, forKey: .updateStrategy) ?? .inPlace
     isPaused = try container.decodeIfPresent(Bool.self, forKey: .isPaused) ?? false
+    // An interval from a newer or hand-edited file that we don't know falls back to the default.
+    fullSyncInterval =
+      (try? container.decodeIfPresent(FullSyncInterval.self, forKey: .fullSyncInterval))
+      ?? .default
     driveFolderName = Self.normalizedDriveFolderName(
       try container.decodeIfPresent(String.self, forKey: .driveFolderName) ?? "")
   }

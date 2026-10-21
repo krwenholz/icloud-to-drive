@@ -261,6 +261,18 @@ private struct GeneralSettings: View {
         Text("In place (keeps Doc links)").tag(UpdateStrategy.inPlace)
         Text("Replace (new Doc each edit)").tag(UpdateStrategy.replace)
       }
+      Picker(
+        "Full sync every",
+        selection: Binding(
+          get: { model.snapshot.fullSyncInterval },
+          set: { interval in Task { await model.setFullSyncInterval(interval) } })
+      ) {
+        ForEach(FullSyncInterval.allCases, id: \.self) { Text($0.title).tag($0) }
+      }
+      Text(
+        "A safety-net pass over every folder. Changes to your files still sync within seconds."
+      )
+      .font(.callout).foregroundStyle(.secondary)
       Text("`mirrorctl probe` tells you which strategy your Drive account supports.")
         .font(.callout).foregroundStyle(.secondary)
     }

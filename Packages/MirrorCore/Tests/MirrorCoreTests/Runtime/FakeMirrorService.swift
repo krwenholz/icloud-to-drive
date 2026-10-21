@@ -13,6 +13,7 @@ actor FakeMirrorService: MirrorService {
     case updateRoot(RootConfig)
     case setUpdateStrategy(UpdateStrategy)
     case setDriveFolderName(String)
+    case setFullSyncInterval(FullSyncInterval)
     case importClientFile(String)
     case signIn, signOut
   }
@@ -57,6 +58,9 @@ actor FakeMirrorService: MirrorService {
   }
   func setUpdateStrategy(_ strategy: UpdateStrategy) { calls.append(.setUpdateStrategy(strategy)) }
   func setDriveFolderName(_ name: String) { calls.append(.setDriveFolderName(name)) }
+  func setFullSyncInterval(_ interval: FullSyncInterval) {
+    calls.append(.setFullSyncInterval(interval))
+  }
   func importClientFile(from url: URL) throws {
     calls.append(.importClientFile(url.path))
     try check()

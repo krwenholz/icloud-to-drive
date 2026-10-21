@@ -269,6 +269,36 @@ final class SnapshotRecorder: @unchecked Sendable {
     await coordinator.stop()
   }
 
+  @Test func changingTheFullSyncIntervalRestartsTheTimer() async throws {
+    let harness = try CoordinatorHarness()
+    defer { harness.engineHarness.cleanUp() }
+    let root = try harness.engineHarness.makeRoot(files: ["a.md": "a"])
+    try harness.saveConfig([root])
+    let coordinator = harness.makeCoordinator()
+    let recorder = await SnapshotRecorder(coordinator)
+    await coordinator.start()
+    await harness.clock.waitForSleepers([.seconds(3600)])
+
+    await coordinator.setFullSyncInterval(.fifteenMinutes)
+    #expect(harness.savedConfig()?.fullSyncInterval == .fifteenMinutes)
+    #expect(await eventually { recorder.latest.fullSyncInterval == .fifteenMinutes })
+    await harness.clock.waitForSleepers([.seconds(900)])
+
+    // The old hour-long sleep is gone: a quarter of an hour is enough now.
+    try harness.engineHarness.write(root, "later.md", "later")
+    harness.clock.advance(by: .seconds(900))
+    #expect(await eventually { await harness.docNames().contains("later") })
+
+    await coordinator.setFullSyncInterval(.sixHours)
+    await harness.clock.waitForSleepers([.seconds(900 + 6 * 3600)])
+    try harness.engineHarness.write(root, "much-later.md", "much later")
+    harness.clock.advance(by: .seconds(3600))
+    #expect(!(await harness.docNames().contains("much-later")))
+    harness.clock.advance(by: .seconds(5 * 3600))
+    #expect(await eventually { await harness.docNames().contains("much-later") })
+    await coordinator.stop()
+  }
+
   @Test func addAndRemoveRoots() async throws {
     let harness = try CoordinatorHarness()
     defer { harness.engineHarness.cleanUp() }

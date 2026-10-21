@@ -12,6 +12,17 @@ import Testing
     #expect(config.driveFolderName == AppIdentity.driveRootFolderName)
   }
 
+  @Test func fullSyncIntervalDefaultsToAnHourAndToleratesUnknownValues() throws {
+    func decode(_ json: String) throws -> MirrorConfig {
+      try JSONDecoder().decode(MirrorConfig.self, from: Data(json.utf8))
+    }
+    #expect(try decode(#"{"roots":[]}"#).fullSyncInterval == .oneHour)
+    #expect(try decode(#"{"fullSyncInterval":"sixHours"}"#).fullSyncInterval == .sixHours)
+    #expect(try decode(#"{"fullSyncInterval":"every-blue-moon"}"#).fullSyncInterval == .oneHour)
+    #expect(
+      FullSyncInterval.allCases.map(\.duration) == [.seconds(900), .seconds(3600), .seconds(21600)])
+  }
+
   @Test func blankFolderNameFallsBackToTheDefault() {
     #expect(MirrorConfig.normalizedDriveFolderName("  \n") == "iCloud Mirror")
     #expect(MirrorConfig.normalizedDriveFolderName(" Claude ") == "Claude")

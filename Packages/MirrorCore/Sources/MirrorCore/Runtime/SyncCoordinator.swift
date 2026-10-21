@@ -1,6 +1,6 @@
 import Foundation
 
-/// Runs the app: decides when roots reconcile (launch, wake, file changes, hourly, Sync Now),
+/// Runs the app: decides when roots reconcile (launch, wake, file changes, the periodic full pass, Sync Now),
 /// owns the configuration and sign-in, and publishes a `MirrorSnapshot` for the UI.
 public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
   public struct Dependencies: Sendable {
@@ -13,7 +13,6 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     public var openBrowser: @Sendable (URL) async -> Void
     public var watcher: any FolderWatching
     public var log: MirrorLog
-    public var hourlyInterval: Duration = .seconds(60 * 60)
     public var quietPeriod: Duration = .seconds(3)
 
     public init(
@@ -47,7 +46,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
   private var missingFolders: [UUID: String] = [:]
   private var subscribers: [UUID: AsyncStream<MirrorSnapshot>.Continuation] = [:]
   private var debouncer: Debouncer<C>?
-  private var hourlyTask: Task<Void, Never>?
+  private var fullPassTask: Task<Void, Never>?
 
   public init(_ deps: Dependencies) {
     self.deps = deps
@@ -79,13 +78,13 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     }
     self.debouncer = debouncer
     await restartWatcher()
-    startHourlyTimer()
+    startFullPassTimer()
     deps.log.info("started with \(config.roots.count) roots")
     await syncAll(explicit: false)
   }
 
   public func stop() async {
-    hourlyTask?.cancel()
+    fullPassTask?.cancel()
     await debouncer?.cancelAll()
     await deps.watcher.stop()
     for subscriber in subscribers.values { subscriber.finish() }
@@ -187,6 +186,15 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     await syncAll(explicit: false)
   }
 
+  public func setFullSyncInterval(_ interval: FullSyncInterval) async {
+    guard interval != config.fullSyncInterval else { return }
+    config.fullSyncInterval = interval
+    saveConfig()
+    // Restarting measures the new interval from now, which is what the owner just asked for.
+    startFullPassTimer()
+    await publish()
+  }
+
   public func importClientFile(from url: URL) async throws {
     _ = try ClientFile.importFile(from: url, applicationSupport: deps.paths.applicationSupport)
     deps.log.info("imported OAuth client file")
@@ -283,11 +291,11 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     }
   }
 
-  private func startHourlyTimer() {
-    hourlyTask?.cancel()
+  private func startFullPassTimer() {
+    fullPassTask?.cancel()
     let clock = deps.clock
-    let interval = deps.hourlyInterval
-    hourlyTask = Task { [weak self] in
+    let interval = config.fullSyncInterval.duration
+    fullPassTask = Task { [weak self] in
       while !Task.isCancelled {
         do { try await clock.sleep(for: interval) } catch { return }
         await self?.syncAll(explicit: false)
@@ -388,6 +396,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     snapshot.isPaused = config.isPaused
     snapshot.updateStrategy = config.updateStrategy
     snapshot.driveFolderName = config.driveFolderName
+    snapshot.fullSyncInterval = config.fullSyncInterval
     var roots: [RootSnapshot] = []
     for root in config.roots {
       var status = RootSnapshot(config: root)

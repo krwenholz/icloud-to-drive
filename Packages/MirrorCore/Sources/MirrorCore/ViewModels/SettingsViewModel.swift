@@ -164,6 +164,10 @@ public final class SettingsViewModel {
     await service.setUpdateStrategy(strategy)
   }
 
+  public func setFullSyncInterval(_ interval: FullSyncInterval) async {
+    await service.setFullSyncInterval(interval)
+  }
+
   /// An empty name goes back to the default.
   public func setDriveFolderName(_ name: String) async {
     await service.setDriveFolderName(name)
