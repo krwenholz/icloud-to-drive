@@ -13,7 +13,7 @@ public enum PlanRenderer {
       case .createDoc(let file, _):
         counts.create += 1
         lines.append("create  \(file.path)")
-      case .updateDoc(let file, _, _):
+      case .updateDoc(let file, _, _), .reformatDoc(let file, _, _):
         counts.update += 1
         lines.append("update  \(file.path)")
       case .moveDoc(let from, let to, _):

@@ -4,6 +4,8 @@ import Foundation
 public struct DriveFile: Equatable, Sendable {
   public static let docMimeType = "application/vnd.google-apps.document"
   public static let folderMimeType = "application/vnd.google-apps.folder"
+  /// What a file uploaded without conversion is stored as.
+  public static let markdownMimeType = "text/markdown"
 
   public var id: String
   public var name: String
@@ -64,14 +66,16 @@ public protocol DriveClient: Sendable {
     name: String, parentID: String?, description: String?, appProperties: [String: String]
   ) async throws -> DriveFile
 
-  /// Uploads Markdown that Drive converts into a Google Doc.
-  func createDoc(
+  /// Uploads Markdown. With `convert`, Drive turns it into a Google Doc; without, it stays a
+  /// plain Markdown file.
+  func createFile(
     markdown: Data, name: String, parentID: String, description: String,
-    appProperties: [String: String]
+    appProperties: [String: String], convert: Bool
   ) async throws -> DriveFile
 
-  /// Re-uploads Markdown into an existing Doc.
-  func updateDoc(
+  /// Re-uploads Markdown into an existing file. Whether it is converted is decided by the file
+  /// it replaces: a Doc stays a Doc and a plain file stays plain, so there is no flag.
+  func updateFile(
     id: String, markdown: Data, description: String, appProperties: [String: String]
   ) async throws -> DriveFile
 

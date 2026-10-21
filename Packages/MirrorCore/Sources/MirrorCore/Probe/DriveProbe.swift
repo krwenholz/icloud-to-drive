@@ -100,10 +100,10 @@ public struct DriveProbe: Sendable {
     for fixture in corpus {
       let content = PreparedContent(markdown: Data(fixture.markdown.utf8))
       do {
-        let file = try await drive.createDoc(
+        let file = try await drive.createFile(
           markdown: content.data, name: fixture.name, parentID: folder.id,
           description: "Drive Mirror probe / \(fixture.name).md",
-          appProperties: properties(hash: content.hash))
+          appProperties: properties(hash: content.hash), convert: true)
         let isDoc = file.mimeType == DriveFile.docMimeType
         record("Upload '\(fixture.name)'", isDoc, isDoc ? file.id : "type was \(file.mimeType)")
         uploaded.append((fixture, file))
@@ -160,7 +160,7 @@ public struct DriveProbe: Sendable {
     var detail = ""
     var contentDetail = ""
     do {
-      _ = try await drive.updateDoc(
+      _ = try await drive.updateFile(
         id: original.id, markdown: content.data, description: original.description ?? "",
         appProperties: properties(hash: content.hash))
       let current = try await drive.getFile(id: original.id)

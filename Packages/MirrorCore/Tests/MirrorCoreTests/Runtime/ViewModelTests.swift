@@ -177,6 +177,23 @@ struct SettingsViewModelTests {
     #expect(model.errorMessage == nil)
   }
 
+  @Test func togglesConversionToDocs() async {
+    let model = SettingsViewModel(service: service, loginItem: loginItem)
+    let root = sampleRoot()
+    var snapshot = MirrorSnapshot()
+    snapshot.roots = [root]
+    await service.push(snapshot)
+    await model.start()
+
+    await model.setConvertToDocs(for: root.id, true)
+    #expect(await service.calls.isEmpty)
+    await model.setConvertToDocs(for: root.id, false)
+
+    var expected = root.config
+    expected.convertToDocs = false
+    #expect(await service.calls == [.updateRoot(expected)])
+  }
+
   @Test func editsPatterns() async throws {
     let model = SettingsViewModel(service: service, loginItem: loginItem)
     let root = sampleRoot()

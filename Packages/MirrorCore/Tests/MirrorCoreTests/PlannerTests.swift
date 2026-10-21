@@ -35,11 +35,12 @@ private struct Scenario {
     scan.removeAll { $0.path.value == path }
   }
 
-  func plan(allowMassDeletion: Bool = false) -> SyncPlan {
-    let needed = Set(Planner.pathsNeedingContent(scan: scan, state: state))
+  func plan(convertToDocs: Bool = true, allowMassDeletion: Bool = false) -> SyncPlan {
+    let needed = Set(
+      Planner.pathsNeedingContent(scan: scan, state: state, convertToDocs: convertToDocs))
     return Planner.plan(
       scan: .files(scan), state: state, contentHashes: hashes.filter { needed.contains($0.key) },
-      allowMassDeletion: allowMassDeletion)
+      convertToDocs: convertToDocs, allowMassDeletion: allowMassDeletion)
   }
 }
 
@@ -229,5 +230,27 @@ struct PlannerTests {
     #expect(
       scenario.plan().operations == [.recordUnchanged(file("a.md", "one", modified: Scenario.then))]
     )
+  }
+
+  @Test func filesInTheWrongFormatAreReplacedNotDeleted() {
+    // Every file is mismatched; if these counted as trashes the guard would hold them all.
+    let synced = Dictionary(uniqueKeysWithValues: (0..<20).map { ("n\($0).md", "c\($0)") })
+    var scenario = Scenario(synced: synced)
+    for (path, _) in synced { scenario.hashes[try! RelativePath(path)] = synced[path] }
+
+    let plan = scenario.plan(convertToDocs: false)
+
+    #expect(plan.attention == nil)
+    #expect(plan.heldDeletions.isEmpty)
+    #expect(plan.operations.count == 20)
+    #expect(
+      plan.operations.allSatisfy { if case .reformatDoc = $0 { true } else { false } })
+    #expect(scenario.plan(convertToDocs: true).operations.isEmpty)
+  }
+
+  @Test func plainFilesAreLeftAloneWhenTheRootStaysPlain() {
+    var scenario = Scenario(synced: ["a.md": "one"])
+    scenario.state.files[path("a.md")]?.converted = false
+    #expect(scenario.plan(convertToDocs: false).operations.isEmpty)
   }
 }

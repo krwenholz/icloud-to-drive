@@ -59,22 +59,22 @@ struct LimitedDriveClient: DriveClient {
     }
   }
 
-  func createDoc(
+  func createFile(
     markdown: Data, name: String, parentID: String, description: String,
-    appProperties: [String: String]
+    appProperties: [String: String], convert: Bool
   ) async throws -> DriveFile {
     try await limiter.run {
-      try await base.createDoc(
+      try await base.createFile(
         markdown: markdown, name: name, parentID: parentID, description: description,
-        appProperties: appProperties)
+        appProperties: appProperties, convert: convert)
     }
   }
 
-  func updateDoc(id: String, markdown: Data, description: String, appProperties: [String: String])
+  func updateFile(id: String, markdown: Data, description: String, appProperties: [String: String])
     async throws -> DriveFile
   {
     try await limiter.run {
-      try await base.updateDoc(
+      try await base.updateFile(
         id: id, markdown: markdown, description: description, appProperties: appProperties)
     }
   }

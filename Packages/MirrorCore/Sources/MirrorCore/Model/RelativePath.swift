@@ -57,6 +57,9 @@ public struct RelativePath: Hashable, Comparable, Codable, Sendable, CustomStrin
     return String(name.dropLast(3))
   }
 
+  /// The name of this file's Drive copy: a converted Doc drops `.md`, a plain file keeps it.
+  public func driveName(converted: Bool) -> String { converted ? docTitle : fileName }
+
   /// The Doc description that records where it came from, e.g. `Notes / projects/garden.md`.
   public func docDescription(rootName: String) -> String {
     "\(rootName) / \(value)"

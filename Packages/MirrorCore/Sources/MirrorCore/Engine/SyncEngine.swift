@@ -160,7 +160,9 @@ public actor SyncEngine {
 
     var contents: [RelativePath: PreparedContent] = [:]
     let before = (try? state())?[root: root.id] ?? RootState()
-    for path in Planner.pathsNeedingContent(scan: scan, state: before) {
+    for path in Planner.pathsNeedingContent(
+      scan: scan, state: before, convertToDocs: root.convertToDocs)
+    {
       switch await reader.read(root.url.appending(path: path.value)) {
       case .content(let content): contents[path] = content
       case .notDownloaded: break
@@ -170,7 +172,7 @@ public actor SyncEngine {
 
     let plan = Planner.plan(
       scan: outcome, state: before, contentHashes: contents.mapValues(\.hash),
-      allowMassDeletion: applyPendingDeletions)
+      convertToDocs: root.convertToDocs, allowMassDeletion: applyPendingDeletions)
     report.deferred = plan.deferred.filter { report.failures[$0] == nil }
     report.heldDeletions = plan.heldDeletions.count
     report.attention = plan.attention
@@ -257,10 +259,11 @@ public actor SyncEngine {
 
     case .createDoc(let file, let hash):
       let content = try content(for: file.path, in: contents)
-      let doc = try await createDoc(root: root, path: file.path, content: content)
+      let doc = try await createFile(root: root, path: file.path, content: content)
       try update(root) {
         $0.files[file.path] = FileRecord(
-          fileID: doc.id, contentHash: hash, size: file.size, modified: file.modified)
+          fileID: doc.id, contentHash: hash, size: file.size, modified: file.modified,
+          converted: root.convertToDocs)
       }
 
     case .updateDoc(let file, let fileID, let hash):
@@ -268,23 +271,39 @@ public actor SyncEngine {
       let newID: String
       switch updateStrategy {
       case .inPlace:
-        newID = try await drive.updateDoc(
+        newID = try await drive.updateFile(
           id: fileID, markdown: content.data,
           description: DriveDescription.doc(rootName: root.displayName, path: file.path),
           appProperties: docProperties(root, file.path, hash)
         ).id
       case .replace:
-        newID = try await createDoc(root: root, path: file.path, content: content).id
+        newID = try await createFile(root: root, path: file.path, content: content).id
       }
+      // The planner only updates files already in the root's format, so the format is unchanged.
       try update(root) {
         $0.files[file.path] = FileRecord(
-          fileID: newID, contentHash: hash, size: file.size, modified: file.modified)
+          fileID: newID, contentHash: hash, size: file.size, modified: file.modified,
+          converted: root.convertToDocs)
         if newID != fileID { $0.orphanedFileIDs.append(fileID) }
       }
       if newID != fileID { await retryOrphans(root) }
 
+    case .reformatDoc(let file, let fileID, let hash):
+      let content = try content(for: file.path, in: contents)
+      let replacement = try await createFile(root: root, path: file.path, content: content)
+      // Trash the old copy through the orphan list, so a failed trash is retried instead of
+      // leaving both formats in Drive.
+      try update(root) {
+        $0.files[file.path] = FileRecord(
+          fileID: replacement.id, contentHash: hash, size: file.size, modified: file.modified,
+          converted: root.convertToDocs)
+        $0.orphanedFileIDs.append(fileID)
+      }
+      await retryOrphans(root)
+
     case .moveDoc(let source, let destination, let fileID):
       let rootState = try state()[root: root.id]
+      guard let record = rootState.files[source] else { return }
       let oldDirectory = source.directory
       let newDirectory = destination.path.directory
       var addParent: String?
@@ -296,10 +315,12 @@ public actor SyncEngine {
         addParent = newParent
         removeParent = rootState.folderID(forDirectory: oldDirectory)
       }
-      guard let record = rootState.files[source] else { return }
+      // A rename must keep the name in the file's own format: `garden` for a Doc, `garden.md`
+      // for a plain file.
+      let oldName = source.driveName(converted: record.converted)
+      let newName = destination.path.driveName(converted: record.converted)
       _ = try await drive.moveFile(
-        id: fileID,
-        name: source.docTitle == destination.path.docTitle ? nil : destination.path.docTitle,
+        id: fileID, name: oldName == newName ? nil : newName,
         description: DriveDescription.doc(rootName: root.displayName, path: destination.path),
         appProperties: docProperties(root, destination.path, record.contentHash),
         addParent: addParent, removeParent: removeParent)
@@ -308,7 +329,7 @@ public actor SyncEngine {
         $0.failures[source] = nil
         $0.files[destination.path] = FileRecord(
           fileID: fileID, contentHash: record.contentHash, size: destination.size,
-          modified: destination.modified)
+          modified: destination.modified, converted: record.converted)
       }
 
     case .recordUnchanged(let file):
@@ -323,16 +344,17 @@ public actor SyncEngine {
     }
   }
 
-  private func createDoc(root: RootConfig, path: RelativePath, content: PreparedContent)
+  private func createFile(root: RootConfig, path: RelativePath, content: PreparedContent)
     async throws -> DriveFile
   {
     guard let parentID = try state()[root: root.id].folderID(forDirectory: path.directory) else {
       throw EngineError.missingFolder(path.directory)
     }
-    return try await drive.createDoc(
-      markdown: content.data, name: path.docTitle, parentID: parentID,
+    return try await drive.createFile(
+      markdown: content.data, name: path.driveName(converted: root.convertToDocs),
+      parentID: parentID,
       description: DriveDescription.doc(rootName: root.displayName, path: path),
-      appProperties: docProperties(root, path, content.hash))
+      appProperties: docProperties(root, path, content.hash), convert: root.convertToDocs)
   }
 
   private func docProperties(_ root: RootConfig, _ path: RelativePath, _ hash: String)
@@ -486,12 +508,13 @@ public actor SyncEngine {
       let previousID = rootState.statusDocID
       let doc: DriveFile
       if let previousID, updateStrategy == .inPlace {
-        doc = try await drive.updateDoc(
+        doc = try await drive.updateFile(
           id: previousID, markdown: data, description: description, appProperties: properties)
       } else {
-        doc = try await drive.createDoc(
+        // Always a Doc, whatever the root's setting: it is for reading, not a mirrored note.
+        doc = try await drive.createFile(
           markdown: data, name: StatusDoc.name, parentID: folderID, description: description,
-          appProperties: properties)
+          appProperties: properties, convert: true)
       }
       try update(root) {
         $0.statusDocID = doc.id
@@ -578,7 +601,8 @@ public actor SyncEngine {
       if rebuilt.files[path] != nil {
         duplicates.append(doc.id)
       } else {
-        rebuilt.files[path] = FileRecord(fileID: doc.id, contentHash: hash)
+        rebuilt.files[path] = FileRecord(
+          fileID: doc.id, contentHash: hash, converted: doc.mimeType == DriveFile.docMimeType)
       }
     }
 
@@ -607,8 +631,8 @@ extension PlannedOperation {
   var path: RelativePath? {
     switch self {
     case .createFolder: nil
-    case .moveDoc(_, let file, _), .updateDoc(let file, _, _), .createDoc(let file, _),
-      .recordUnchanged(let file):
+    case .moveDoc(_, let file, _), .updateDoc(let file, _, _), .reformatDoc(let file, _, _),
+      .createDoc(let file, _), .recordUnchanged(let file):
       file.path
     case .trashDoc(let path, _): path
     }

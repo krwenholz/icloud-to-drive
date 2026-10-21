@@ -127,6 +127,16 @@ public final class SettingsViewModel {
     await perform { try await self.service.updateRoot(root) }
   }
 
+  /// Switching formats re-creates every file in the root, so it is a deliberate action rather
+  /// than part of the Save button.
+  public func setConvertToDocs(for id: UUID, _ convert: Bool) async {
+    guard var root = roots.first(where: { $0.id == id }), root.convertToDocs != convert else {
+      return
+    }
+    root.convertToDocs = convert
+    await perform { try await self.service.updateRoot(root) }
+  }
+
   public func rename(_ id: UUID, to name: String) async {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard var root = roots.first(where: { $0.id == id }), !trimmed.isEmpty else { return }

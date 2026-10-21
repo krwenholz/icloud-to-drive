@@ -12,8 +12,8 @@ public actor InMemoryDriveClient: DriveClient {
 
   public enum Call: Equatable, Sendable {
     case createFolder(name: String)
-    case createDoc(name: String)
-    case updateDoc(id: String)
+    case createFile(name: String)
+    case updateFile(id: String)
     case moveFile(id: String)
     case trashFile(id: String)
     case listFiles
@@ -82,23 +82,24 @@ public actor InMemoryDriveClient: DriveClient {
       content: nil)
   }
 
-  public func createDoc(
+  public func createFile(
     markdown: Data, name: String, parentID: String, description: String,
-    appProperties: [String: String]
+    appProperties: [String: String], convert: Bool
   ) throws -> DriveFile {
-    try record(.createDoc(name: name))
+    try record(.createFile(name: name))
     try requireFolder(parentID)
     return insert(
       DriveFile(
-        id: "", name: name, mimeType: DriveFile.docMimeType, parents: [parentID],
+        id: "", name: name, mimeType: convert ? DriveFile.docMimeType : DriveFile.markdownMimeType,
+        parents: [parentID],
         description: description, appProperties: appProperties),
       content: markdown)
   }
 
-  public func updateDoc(
+  public func updateFile(
     id: String, markdown: Data, description: String, appProperties: [String: String]
   ) throws -> DriveFile {
-    try record(.updateDoc(id: id))
+    try record(.updateFile(id: id))
     var item = try requireItem(id)
     item.content = markdown
     item.file.description = description

@@ -84,8 +84,8 @@ struct EngineHarness {
     for call in calls {
       switch call {
       case .listFiles, .userEmail: continue
-      case .createDoc(name: StatusDoc.name): continue
-      case .updateDoc(let id):
+      case .createFile(name: StatusDoc.name): continue
+      case .updateFile(let id):
         if await drive.item(id)?.file.name == StatusDoc.name { continue }
         result.append(call)
       default: result.append(call)

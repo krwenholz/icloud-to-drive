@@ -8,12 +8,29 @@ public struct FileRecord: Codable, Equatable, Sendable {
   /// forces one round of hashing (but no uploads) for unchanged files.
   public var size: Int64?
   public var modified: Date?
+  /// Whether the Drive file is a converted Google Doc (`true`) or a plain Markdown file. When a
+  /// root's setting stops matching, the file is re-created in the new format.
+  public var converted: Bool
 
-  public init(fileID: String, contentHash: String, size: Int64? = nil, modified: Date? = nil) {
+  public init(
+    fileID: String, contentHash: String, size: Int64? = nil, modified: Date? = nil,
+    converted: Bool = true
+  ) {
     self.fileID = fileID
     self.contentHash = contentHash
     self.size = size
     self.modified = modified
+    self.converted = converted
+  }
+
+  public init(from decoder: any Decoder) throws {
+    // State from before plain files existed describes converted Docs.
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    fileID = try container.decode(String.self, forKey: .fileID)
+    contentHash = try container.decode(String.self, forKey: .contentHash)
+    size = try container.decodeIfPresent(Int64.self, forKey: .size)
+    modified = try container.decodeIfPresent(Date.self, forKey: .modified)
+    converted = try container.decodeIfPresent(Bool.self, forKey: .converted) ?? true
   }
 }
 

@@ -160,7 +160,7 @@ import Testing
     let files = Dictionary(uniqueKeysWithValues: (0..<8).map { ("n\($0).md", "note \($0)") })
     let root = try harness.makeRoot(files: files)
     await harness.drive.failNext(
-      where: { if case .createDoc(name: "n5") = $0 { true } else { false } })
+      where: { if case .createFile(name: "n5") = $0 { true } else { false } })
     let engine = harness.makeEngine()
 
     let first = await engine.reconcile(root)
@@ -183,7 +183,7 @@ import Testing
     let engine = harness.makeEngine()
     _ = await engine.reconcile(root)
     try harness.write(root, "a.md", "a2")
-    await harness.drive.failNext(where: { if case .updateDoc = $0 { true } else { false } })
+    await harness.drive.failNext(where: { if case .updateFile = $0 { true } else { false } })
 
     let failed = await engine.reconcile(root)
     #expect(failed.failures.count == 1)
@@ -229,9 +229,10 @@ import Testing
     _ = await engine.reconcile(root)
     let original = try await harness.docID(engine, "Notes/a")
     let originalItem = try #require(await harness.drive.item(original))
-    let duplicate = try await harness.drive.createDoc(
+    let duplicate = try await harness.drive.createFile(
       markdown: Data("a".utf8), name: "a", parentID: originalItem.file.parents[0],
-      description: "Notes / a.md", appProperties: originalItem.file.appProperties)
+      description: "Notes / a.md", appProperties: originalItem.file.appProperties,
+      convert: true)
 
     try FileManager.default.removeItem(at: harness.paths.stateFile)
     let restarted = harness.makeEngine()
@@ -334,7 +335,7 @@ import Testing
     _ = await engine.reconcile(root)
     let statusID = try await harness.docID(engine, "Notes/_sync-status")
     func statusUpdates() async -> Int {
-      await harness.drive.calls.filter { $0 == .updateDoc(id: statusID) }.count
+      await harness.drive.calls.filter { $0 == .updateFile(id: statusID) }.count
     }
 
     harness.clock.advance(by: 30 * 60)
@@ -470,21 +471,21 @@ actor ConcurrencyProbeDrive: DriveClient {
         name: name, parentID: parentID, description: description, appProperties: appProperties)
     }
   }
-  func createDoc(
+  func createFile(
     markdown: Data, name: String, parentID: String, description: String,
-    appProperties: [String: String]
+    appProperties: [String: String], convert: Bool
   ) async throws -> DriveFile {
     try await track {
-      try await base.createDoc(
+      try await base.createFile(
         markdown: markdown, name: name, parentID: parentID, description: description,
-        appProperties: appProperties)
+        appProperties: appProperties, convert: convert)
     }
   }
-  func updateDoc(id: String, markdown: Data, description: String, appProperties: [String: String])
+  func updateFile(id: String, markdown: Data, description: String, appProperties: [String: String])
     async throws -> DriveFile
   {
     try await track {
-      try await base.updateDoc(
+      try await base.updateFile(
         id: id, markdown: markdown, description: description, appProperties: appProperties)
     }
   }

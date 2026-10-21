@@ -79,7 +79,9 @@ public struct CLIRunner: Sendable {
     var hashes: [RelativePath: String] = [:]
     if case .files(let files) = outcome {
       scannedCount = files.count
-      for path in Planner.pathsNeedingContent(scan: files, state: rootState) {
+      for path in Planner.pathsNeedingContent(
+        scan: files, state: rootState, convertToDocs: resolved.root.convertToDocs)
+      {
         if case .content(let content) = await environment.reader.read(
           resolved.root.url.appending(path: path.value))
         {
@@ -87,7 +89,9 @@ public struct CLIRunner: Sendable {
         }
       }
     }
-    let plan = Planner.plan(scan: outcome, state: rootState, contentHashes: hashes)
+    let plan = Planner.plan(
+      scan: outcome, state: rootState, contentHashes: hashes,
+      convertToDocs: resolved.root.convertToDocs)
     for line in PlanRenderer.render(plan, scannedCount: scannedCount) { environment.out(line) }
     return 0
   }

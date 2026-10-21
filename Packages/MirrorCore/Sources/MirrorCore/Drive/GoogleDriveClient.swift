@@ -39,12 +39,14 @@ public final class GoogleDriveClient: DriveClient {
       json: metadata)
   }
 
-  public func createDoc(
+  public func createFile(
     markdown: Data, name: String, parentID: String, description: String,
-    appProperties: [String: String]
+    appProperties: [String: String], convert: Bool
   ) async throws -> DriveFile {
+    // Asking for a Doc mimeType is what makes Drive convert the upload.
     let metadata: [String: Any] = [
-      "name": name, "mimeType": DriveFile.docMimeType, "parents": [parentID],
+      "name": name, "mimeType": convert ? DriveFile.docMimeType : DriveFile.markdownMimeType,
+      "parents": [parentID],
       "description": description, "appProperties": appProperties,
     ]
     let url = Self.url(
@@ -52,7 +54,7 @@ public final class GoogleDriveClient: DriveClient {
     return try await sendMultipart(method: "POST", url: url, metadata: metadata, markdown: markdown)
   }
 
-  public func updateDoc(
+  public func updateFile(
     id: String, markdown: Data, description: String, appProperties: [String: String]
   ) async throws -> DriveFile {
     let metadata: [String: Any] = ["description": description, "appProperties": appProperties]

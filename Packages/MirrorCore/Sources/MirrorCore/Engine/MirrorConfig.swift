@@ -8,16 +8,31 @@ public struct RootConfig: Codable, Equatable, Identifiable, Sendable {
   /// A regular bookmark, so the folder can be found again after a rename.
   public var bookmark: Data?
   public var filter: PathFilter
+  /// Upload as Google Docs (the default) or as plain Markdown files. Claude's Drive connector
+  /// reads Docs best, but some owners prefer to keep the `.md` files as they are.
+  public var convertToDocs: Bool
 
   public init(
     id: UUID = UUID(), displayName: String, path: String, bookmark: Data? = nil,
-    filter: PathFilter = PathFilter()
+    filter: PathFilter = PathFilter(), convertToDocs: Bool = true
   ) {
     self.id = id
     self.displayName = displayName
     self.path = path
     self.bookmark = bookmark
     self.filter = filter
+    self.convertToDocs = convertToDocs
+  }
+
+  public init(from decoder: any Decoder) throws {
+    // Tolerate missing keys so older config files keep loading as fields are added.
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(UUID.self, forKey: .id)
+    displayName = try container.decode(String.self, forKey: .displayName)
+    path = try container.decode(String.self, forKey: .path)
+    bookmark = try container.decodeIfPresent(Data.self, forKey: .bookmark)
+    filter = try container.decodeIfPresent(PathFilter.self, forKey: .filter) ?? PathFilter()
+    convertToDocs = try container.decodeIfPresent(Bool.self, forKey: .convertToDocs) ?? true
   }
 
   public var url: URL { URL(filePath: path, directoryHint: .isDirectory) }

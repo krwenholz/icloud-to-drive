@@ -49,7 +49,7 @@ struct DriveProbeTests {
   @Test func failedUpdateRecommendsReplaceAndStillTrashes() async throws {
     let drive = InMemoryDriveClient()
     await drive.failNext {
-      if case .updateDoc = $0 { true } else { false }
+      if case .updateFile = $0 { true } else { false }
     }
     let report = await probe(drive).run()
 

@@ -180,6 +180,7 @@ private struct RootEditor: View {
   @State private var name: String
   @State private var include: String
   @State private var exclude: String
+  @State private var convertToDocs: Bool
 
   init(model: SettingsViewModel, root: RootConfig) {
     self.model = model
@@ -187,6 +188,7 @@ private struct RootEditor: View {
     _name = State(initialValue: root.displayName)
     _include = State(initialValue: SettingsViewModel.patternsText(root.filter.include))
     _exclude = State(initialValue: SettingsViewModel.patternsText(root.filter.exclude))
+    _convertToDocs = State(initialValue: root.convertToDocs)
   }
 
   var body: some View {
@@ -196,6 +198,12 @@ private struct RootEditor: View {
       LabeledContent("Folder") {
         Text(root.path).lineLimit(2).truncationMode(.middle).textSelection(.enabled)
       }
+      Toggle("Convert to Google Docs", isOn: $convertToDocs)
+        .onChange(of: convertToDocs) { _, convert in
+          Task { await model.setConvertToDocs(for: root.id, convert) }
+        }
+      Text("Claude's Google Drive connector reads Google Docs best.")
+        .font(.callout).foregroundStyle(.secondary)
       Section("Include patterns, one per line") {
         TextEditor(text: $include).font(.body.monospaced()).frame(minHeight: 50)
       }

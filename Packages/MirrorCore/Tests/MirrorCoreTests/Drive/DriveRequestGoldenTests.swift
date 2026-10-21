@@ -23,15 +23,25 @@ struct DriveRequestGoldenTests {
   }
 
   @Test func createDoc() async throws {
-    _ = try await client.createDoc(
+    _ = try await client.createFile(
       markdown: Data("# Garden\n\n- tomatoes\n".utf8), name: "garden", parentID: "parent-1",
       description: "Notes / projects/garden.md",
-      appProperties: ["r": "ROOT-UUID", "k": "pathhash", "h": "contenthash", "t": "doc"])
+      appProperties: ["r": "ROOT-UUID", "k": "pathhash", "h": "contenthash", "t": "doc"],
+      convert: true)
     try Golden.check(Golden.render(only), named: "create-doc")
   }
 
+  @Test func createPlainFile() async throws {
+    _ = try await client.createFile(
+      markdown: Data("# Garden\n\n- tomatoes\n".utf8), name: "garden.md", parentID: "parent-1",
+      description: "Notes / projects/garden.md",
+      appProperties: ["r": "ROOT-UUID", "k": "pathhash", "h": "contenthash", "t": "doc"],
+      convert: false)
+    try Golden.check(Golden.render(only), named: "create-file-plain")
+  }
+
   @Test func updateDoc() async throws {
-    _ = try await client.updateDoc(
+    _ = try await client.updateFile(
       id: "doc-1", markdown: Data("# Garden\n\nEdited.\n".utf8),
       description: "Notes / projects/garden.md",
       appProperties: ["r": "ROOT-UUID", "k": "pathhash", "h": "newhash", "t": "doc"])

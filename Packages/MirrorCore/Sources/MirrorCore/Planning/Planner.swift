@@ -16,6 +16,10 @@ public enum PlannedOperation: Equatable, Sendable {
   case createFolder(directory: String)
   case moveDoc(from: RelativePath, to: ScannedFile, fileID: String)
   case updateDoc(ScannedFile, fileID: String, contentHash: String)
+  /// The root's "convert to Google Docs" setting changed since this file was uploaded. The file
+  /// is created again in the new format and the old copy trashed. That is a replacement, not a
+  /// deletion, so it never counts toward the mass-deletion guard.
+  case reformatDoc(ScannedFile, fileID: String, contentHash: String)
   case createDoc(ScannedFile, contentHash: String)
   /// The file's size or modification time changed but its content didn't. Only state changes.
   case recordUnchanged(ScannedFile)
@@ -26,7 +30,7 @@ public enum PlannedOperation: Equatable, Sendable {
     switch self {
     case .createFolder: 0
     case .moveDoc: 1
-    case .updateDoc: 2
+    case .updateDoc, .reformatDoc: 2
     case .createDoc: 3
     case .recordUnchanged: 4
     case .trashDoc: 5
@@ -61,12 +65,15 @@ public enum Planner {
   /// ...as long as they're also more than this many files.
   public static let massDeletionMinimum = 10
 
-  /// Files whose content must be read and hashed before planning: new files, and files whose
-  /// size or modification time changed. Everything else is skipped without being read.
-  public static func pathsNeedingContent(scan: [ScannedFile], state: RootState) -> [RelativePath] {
+  /// Files whose content must be read and hashed before planning: new files, files whose
+  /// size or modification time changed, and files uploaded in the wrong format. Everything
+  /// else is skipped without being read.
+  public static func pathsNeedingContent(
+    scan: [ScannedFile], state: RootState, convertToDocs: Bool = true
+  ) -> [RelativePath] {
     scan.filter { file in
       guard let record = state.files[file.path] else { return true }
-      return !statMatches(record, file)
+      return !statMatches(record, file) || record.converted != convertToDocs
     }.map(\.path).sorted()
   }
 
@@ -76,6 +83,7 @@ public enum Planner {
     scan outcome: ScanOutcome,
     state: RootState,
     contentHashes: [RelativePath: String],
+    convertToDocs: Bool = true,
     allowMassDeletion: Bool = false
   ) -> SyncPlan {
     guard case .files(let scan) = outcome else {
@@ -91,12 +99,14 @@ public enum Planner {
 
     for file in scan.sorted(by: { $0.path < $1.path }) {
       let record = state.files[file.path]
-      if let record, statMatches(record, file) { continue }
+      if let record, statMatches(record, file), record.converted == convertToDocs { continue }
       guard let hash = contentHashes[file.path] else {
         plan.deferred.append(file.path)
         continue
       }
       switch record {
+      case .some(let record) where record.converted != convertToDocs:
+        operations.append(.reformatDoc(file, fileID: record.fileID, contentHash: hash))
       case .some(let record) where record.contentHash == hash:
         operations.append(.recordUnchanged(file))
       case .some(let record):
