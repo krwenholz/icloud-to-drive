@@ -13,6 +13,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     public var openBrowser: @Sendable (URL) async -> Void
     public var watcher: any FolderWatching
     public var log: MirrorLog
+    public var notifier: any ProblemNotifying
     public var quietPeriod: Duration = .seconds(3)
 
     public init(
@@ -21,7 +22,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
       makeEngine: @escaping @Sendable (any AuthSession, UpdateStrategy) -> any ReconcileEngine,
       lookUpEmail: @escaping @Sendable (any AuthSession) async -> String?,
       openBrowser: @escaping @Sendable (URL) async -> Void,
-      watcher: any FolderWatching, log: MirrorLog
+      watcher: any FolderWatching, log: MirrorLog, notifier: any ProblemNotifying
     ) {
       self.paths = paths
       self.clock = clock
@@ -31,6 +32,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
       self.openBrowser = openBrowser
       self.watcher = watcher
       self.log = log
+      self.notifier = notifier
     }
   }
 
@@ -44,6 +46,11 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
   private var syncing: Set<UUID> = []
   /// Roots whose folder couldn't be found from their bookmark.
   private var missingFolders: [UUID: String] = [:]
+  /// Set when Drive rejects our credentials; cleared by signing in again.
+  private var signInExpired = false
+  /// Problems the owner has already been told about. A problem is announced when it first
+  /// appears and not again until it has cleared and come back.
+  private var announcedProblems: Set<String> = []
   private var subscribers: [UUID: AsyncStream<MirrorSnapshot>.Continuation] = [:]
   private var debouncer: Debouncer<C>?
   private var fullPassTask: Task<Void, Never>?
@@ -210,6 +217,8 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     do {
       try await auth.signIn(openBrowser: deps.openBrowser)
       snapshot.message = nil
+      // Reports from before an expiry describe failures the new sign-in will probably fix.
+      lastReports = [:]
       deps.log.info("signed in")
       await adoptSignedIn(auth)
       await syncAll(explicit: true)
@@ -223,6 +232,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
   public func signOut() async {
     try? await auth?.signOut()
     engine = nil
+    signInExpired = false
     snapshot.account = auth == nil ? .needsClientFile : .signedOut
     deps.log.info("signed out")
     await publish()
@@ -269,6 +279,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     let hadFailures = report.error != nil || !report.failures.isEmpty
     if hadFailures, let auth, !(await auth.isSignedIn) {
       self.engine = nil
+      signInExpired = true
       snapshot.account = .signedOut
       snapshot.message = "Google sign-in expired. Sign in again from Settings."
     }
@@ -372,6 +383,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     // Set before publishing the engine, so no reconcile can start with the default name.
     await engine.setDriveFolderName(config.driveFolderName)
     self.engine = engine
+    signInExpired = false
     snapshot.account = .signedIn(email: await deps.lookUpEmail(auth))
     await refreshDriveDetails()
     await publish()
@@ -412,6 +424,72 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     snapshot.roots = roots
     let current = snapshot
     for subscriber in subscribers.values { subscriber.yield(current) }
+    await announceNewProblems()
+  }
+
+  // MARK: - Problem notifications
+
+  private struct Problem {
+    var id: String
+    var title: String
+    var body: String
+  }
+
+  private func currentProblems() -> [Problem] {
+    // Everything else follows from an expired sign-in (every upload fails), so say only that.
+    if signInExpired {
+      return [
+        Problem(
+          id: "sign-in", title: "Google sign-in expired",
+          body: "Sign in again from \(AppIdentity.displayName) Settings to resume syncing.")
+      ]
+    }
+    var problems: [Problem] = []
+    for root in config.roots {
+      let name = root.displayName
+      if let reason = unavailableReason(for: root.id) {
+        problems.append(
+          Problem(
+            id: "unavailable:\(root.id)", title: "Can't reach the \(name) folder", body: reason)
+        )
+      }
+      guard let report = lastReports[root.id] else { continue }
+      if !report.failures.isEmpty {
+        let count = report.failures.count
+        problems.append(
+          Problem(
+            id: "failing:\(root.id)",
+            title: "\(count) \(count == 1 ? "file" : "files") failing in \(name)",
+            body:
+              "They'll be retried automatically. Choose Copy Diagnostics in the menu to see why."
+          ))
+      }
+      if report.heldDeletions > 0 {
+        problems.append(
+          Problem(
+            id: "held:\(root.id)", title: "\(report.heldDeletions) deletions on hold in \(name)",
+            body: "That looks like a mistake, so nothing was trashed. Choose Apply Pending "
+              + "Deletions in the menu if they're right."))
+      }
+    }
+    return problems
+  }
+
+  private func unavailableReason(for id: UUID) -> String? {
+    if let missing = missingFolders[id] { return missing }
+    if case .rootUnavailable(let reason)? = lastReports[id]?.attention { return reason }
+    return nil
+  }
+
+  private func announceNewProblems() async {
+    let problems = currentProblems()
+    let fresh = problems.filter { !announcedProblems.contains($0.id) }
+    // Record before awaiting: this actor can run another publish while a notification is
+    // being delivered, and that one must not announce the same problem again.
+    announcedProblems = Set(problems.map(\.id))
+    for problem in fresh {
+      await deps.notifier.notify(title: problem.title, body: problem.body, id: problem.id)
+    }
   }
 
   private func phase(for id: UUID, report: RootSyncReport?) -> RootPhase {

@@ -8,6 +8,7 @@ final class AppModel {
   let coordinator: SyncCoordinator<ContinuousClock>
   let menu: MenuViewModel
   let settings: SettingsViewModel
+  private let notifier = UserNotificationNotifier()
   private var wakeObserver: (any NSObjectProtocol)?
 
   init(paths: AppPaths = AppPaths()) {
@@ -23,7 +24,7 @@ final class AppModel {
         },
         lookUpEmail: { auth in try? await GoogleDriveClient(tokens: auth).userEmail() },
         openBrowser: { url in await MainActor.run { _ = NSWorkspace.shared.open(url) } },
-        watcher: FolderWatcher(), log: log))
+        watcher: FolderWatcher(), log: log, notifier: notifier))
     menu = MenuViewModel(
       service: coordinator,
       copyToPasteboard: { text in
@@ -37,6 +38,7 @@ final class AppModel {
   func start() async {
     await menu.start()
     await settings.start()
+    await notifier.requestAuthorization()
     let coordinator = coordinator
     wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
       forName: NSWorkspace.didWakeNotification, object: nil, queue: .main

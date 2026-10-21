@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import os
 
 @testable import MirrorCore
 
@@ -92,6 +93,25 @@ struct EngineHarness {
       }
     }
     return result
+  }
+}
+
+/// A reader whose failures tests switch on and off, and which remembers what it was asked to
+/// read. Files are matched by name, so use flat test trees.
+final class ScriptedReader: FileReading, Sendable {
+  private let failing = OSAllocatedUnfairLock(initialState: Set<String>())
+  private let reads = OSAllocatedUnfairLock(initialState: [String]())
+  private let base = CoordinatedFileReader()
+
+  func setFailing(_ names: Set<String>) { failing.withLock { $0 = names } }
+  var readNames: [String] { reads.withLock { $0 } }
+  func clearReads() { reads.withLock { $0 = [] } }
+
+  func read(_ url: URL) async -> FileReadResult {
+    let name = url.lastPathComponent
+    reads.withLock { $0.append(name) }
+    if failing.withLock({ $0.contains(name) }) { return .failed("simulated read failure") }
+    return await base.read(url)
   }
 }
 

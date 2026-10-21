@@ -89,6 +89,8 @@ struct CoordinatorHarness {
   let clock = ManualClock()
   let auth: FakeAuth
   let watcher = FakeWatcher()
+  let notifier = RecordingNotifier()
+  let reader = ScriptedReader()
   let opened = OpenedURLs()
   var paths: AppPaths { engineHarness.paths }
   var drive: InMemoryDriveClient { engineHarness.drive }
@@ -111,17 +113,19 @@ struct CoordinatorHarness {
     let drive = drive
     let harness = engineHarness
     let opened = opened
+    let reader = reader
     return SyncCoordinator(
       .init(
         paths: paths, clock: clock,
         makeAuth: { _ in auth },
         makeEngine: { _, strategy in
-          harness.makeEngine(strategy: strategy, drive: AuthCheckingDrive(base: drive, auth: auth))
+          harness.makeEngine(
+            strategy: strategy, reader: reader, drive: AuthCheckingDrive(base: drive, auth: auth))
         },
         lookUpEmail: { _ in "me@example.com" },
         openBrowser: { await opened.append($0) },
         watcher: watcher,
-        log: MirrorLog(file: RollingLogFile(url: paths.logFile))))
+        log: MirrorLog(file: RollingLogFile(url: paths.logFile)), notifier: notifier))
   }
 
   func saveConfig(_ roots: [RootConfig]) throws {
@@ -138,6 +142,19 @@ struct CoordinatorHarness {
   func docNames() async -> Set<String> {
     Set(
       await drive.items.values.filter { !$0.trashed && !$0.file.isFolder }.map(\.file.name))
+  }
+}
+
+/// Records every notification the coordinator asks for.
+actor RecordingNotifier: ProblemNotifying {
+  struct Notification: Equatable {
+    var title: String
+    var id: String
+  }
+  private(set) var sent: [Notification] = []
+  var titles: [String] { sent.map(\.title) }
+  func notify(title: String, body: String, id: String) {
+    sent.append(Notification(title: title, id: id))
   }
 }
 
