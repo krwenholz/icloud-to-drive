@@ -44,6 +44,8 @@ public actor SyncEngine {
   private let timeZone: TimeZone
   private let locale: Locale
   public var updateStrategy: UpdateStrategy
+  /// Pushed by the coordinator when the owner edits it; applied by the next reconcile.
+  public var driveFolderName: String
 
   private var loadedState: MirrorState?
   private var queues: [UUID: Task<RootSyncReport, Never>] = [:]
@@ -55,6 +57,7 @@ public actor SyncEngine {
     reader: any FileReading = CoordinatedFileReader(),
     scanner: FileScanner = FileScanner(),
     updateStrategy: UpdateStrategy = .inPlace,
+    driveFolderName: String = AppIdentity.driveRootFolderName,
     maxConcurrentRequests: Int = 4,
     now: @escaping @Sendable () -> Date = { Date() },
     timeZone: TimeZone = .current,
@@ -65,12 +68,17 @@ public actor SyncEngine {
     self.reader = reader
     self.scanner = scanner
     self.updateStrategy = updateStrategy
+    self.driveFolderName = MirrorConfig.normalizedDriveFolderName(driveFolderName)
     self.now = now
     self.timeZone = timeZone
     self.locale = locale
   }
 
   public func setUpdateStrategy(_ strategy: UpdateStrategy) { updateStrategy = strategy }
+
+  public func setDriveFolderName(_ name: String) {
+    driveFolderName = MirrorConfig.normalizedDriveFolderName(name)
+  }
 
   /// Brings a root's Drive folder in line with its local folder. Calls for the same root queue
   /// behind each other; calls for different roots run concurrently.
@@ -390,36 +398,51 @@ public actor SyncEngine {
     }
   }
 
-  /// Finds or creates `iCloud Mirror`. Roots reconciling at the same time share one attempt,
-  /// or each would create its own folder.
+  /// Finds or creates the mirror folder and gives it the configured name. Roots reconciling at
+  /// the same time share one attempt, or each would create its own folder.
   private func ensureMirrorFolder() async throws -> String {
-    if let id = try state().mirrorFolderID { return id }
     if let mirrorFolderSetup { return try await mirrorFolderSetup.value }
-    let setup = Task { try await self.findOrCreateMirrorFolder() }
+    let setup = Task { try await self.prepareMirrorFolder() }
     mirrorFolderSetup = setup
     defer { mirrorFolderSetup = nil }
     return try await setup.value
   }
 
-  private func findOrCreateMirrorFolder() async throws -> String {
-    let existing = try await drive.listFiles(
-      appProperty: AppPropertyKey.kind, value: DriveItemKind.mirrorFolder.rawValue
-    )
-    .filter(\.isFolder)
-    .min { ($0.modifiedTime ?? .distantPast) < ($1.modifiedTime ?? .distantPast) }
-    var folderID = existing?.id
+  private func prepareMirrorFolder() async throws -> String {
+    let wanted = driveFolderName
+    var current = try state()
+    var folderID = current.mirrorFolderID
+    var folderName = current.mirrorFolderName
     if folderID == nil {
-      folderID =
-        try await drive.createFolder(
-          name: AppIdentity.driveRootFolderName, parentID: nil,
+      let existing = try await drive.listFiles(
+        appProperty: AppPropertyKey.kind, value: DriveItemKind.mirrorFolder.rawValue
+      )
+      .filter(\.isFolder)
+      .min { ($0.modifiedTime ?? .distantPast) < ($1.modifiedTime ?? .distantPast) }
+      if let existing {
+        folderID = existing.id
+        folderName = existing.name
+      } else {
+        let created = try await drive.createFolder(
+          name: wanted, parentID: nil,
           description: "Created by \(AppIdentity.displayName). The notes on iCloud are the "
             + "source of truth; this folder can be rebuilt from them.",
-          appProperties: [AppPropertyKey.kind: DriveItemKind.mirrorFolder.rawValue]
-        ).id
+          appProperties: [AppPropertyKey.kind: DriveItemKind.mirrorFolder.rawValue])
+        folderID = created.id
+        folderName = created.name
+      }
     }
     guard let folderID else { throw DriveError.invalidResponse("no mirror folder ID") }
-    var current = try state()
+    if folderName != wanted {
+      // Rename in place so the folder keeps its ID and everything under it stays put.
+      _ = try await drive.moveFile(
+        id: folderID, name: wanted, description: nil, appProperties: nil, addParent: nil,
+        removeParent: nil)
+      folderName = wanted
+    }
+    current = try state()
     current.mirrorFolderID = folderID
+    current.mirrorFolderName = folderName
     try commit(current)
     return folderID
   }

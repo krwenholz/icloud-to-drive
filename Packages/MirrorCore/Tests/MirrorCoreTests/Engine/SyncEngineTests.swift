@@ -349,6 +349,46 @@ import Testing
     #expect(status?.contains("2027-01-15T09:01:00Z") == true)
   }
 
+  @Test func newMirrorFolderUsesTheConfiguredName() async throws {
+    defer { harness.cleanUp() }
+    let root = try harness.makeRoot(files: ["a.md": "a"])
+    let engine = harness.makeEngine(driveFolderName: "Claude Notes")
+
+    _ = await engine.reconcile(root)
+
+    let mirror = try #require(await engine.mirrorFolderID())
+    #expect(await harness.drive.item(mirror)?.file.name == "Claude Notes")
+  }
+
+  @Test func changingTheFolderNameRenamesTheExistingFolder() async throws {
+    defer { harness.cleanUp() }
+    let root = try harness.makeRoot(files: ["a.md": "a", "sub/b.md": "b"])
+    let engine = harness.makeEngine()
+    _ = await engine.reconcile(root)
+    let mirror = try #require(await engine.mirrorFolderID())
+    let treeBefore = try await harness.tree(engine)
+    let docID = try await harness.docID(engine, "Notes/sub/b")
+
+    await engine.setDriveFolderName("  Claude Notes ")
+    let report = await engine.reconcile(root)
+
+    #expect(report.completed)
+    #expect(await engine.mirrorFolderID() == mirror)
+    #expect(await harness.drive.item(mirror)?.file.name == "Claude Notes")
+    #expect(try await harness.tree(engine) == treeBefore)
+    #expect(try await harness.docID(engine, "Notes/sub/b") == docID)
+    let folders = await harness.drive.items.values.filter {
+      $0.file.appProperties["t"] == "mirror"
+    }
+    #expect(folders.count == 1)
+
+    // A restarted engine remembers the applied name and doesn't rename again.
+    let start = await harness.drive.calls.count
+    let restarted = harness.makeEngine(driveFolderName: "Claude Notes")
+    _ = await restarted.reconcile(root)
+    #expect(await harness.contentCalls(since: start).isEmpty)
+  }
+
   @Test func capsConcurrentDriveRequests() async throws {
     defer { harness.cleanUp() }
     let files = Dictionary(uniqueKeysWithValues: (0..<12).map { ("n\($0).md", "note \($0)") })

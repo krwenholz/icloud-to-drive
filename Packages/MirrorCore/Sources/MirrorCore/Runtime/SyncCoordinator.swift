@@ -178,6 +178,15 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     await publish()
   }
 
+  public func setDriveFolderName(_ name: String) async {
+    config.driveFolderName = MirrorConfig.normalizedDriveFolderName(name)
+    saveConfig()
+    await engine?.setDriveFolderName(config.driveFolderName)
+    await publish()
+    // The rename happens during a reconcile; run one so the change shows up in Drive now.
+    await syncAll(explicit: false)
+  }
+
   public func importClientFile(from url: URL) async throws {
     _ = try ClientFile.importFile(from: url, applicationSupport: deps.paths.applicationSupport)
     deps.log.info("imported OAuth client file")
@@ -351,7 +360,10 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
   }
 
   private func adoptSignedIn(_ auth: any AuthSession) async {
-    engine = deps.makeEngine(auth, config.updateStrategy)
+    let engine = deps.makeEngine(auth, config.updateStrategy)
+    // Set before publishing the engine, so no reconcile can start with the default name.
+    await engine.setDriveFolderName(config.driveFolderName)
+    self.engine = engine
     snapshot.account = .signedIn(email: await deps.lookUpEmail(auth))
     await refreshDriveDetails()
     await publish()
@@ -375,6 +387,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
   private func publish() async {
     snapshot.isPaused = config.isPaused
     snapshot.updateStrategy = config.updateStrategy
+    snapshot.driveFolderName = config.driveFolderName
     var roots: [RootSnapshot] = []
     for root in config.roots {
       var status = RootSnapshot(config: root)

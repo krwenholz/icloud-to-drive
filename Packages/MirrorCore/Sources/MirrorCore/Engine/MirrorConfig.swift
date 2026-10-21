@@ -27,10 +27,22 @@ public struct MirrorConfig: Codable, Equatable, Sendable {
   public var roots: [RootConfig] = []
   public var updateStrategy: UpdateStrategy = .inPlace
   public var isPaused = false
+  /// The name of the top-level Drive folder that holds every root's mirror.
+  public var driveFolderName = AppIdentity.driveRootFolderName
 
-  public init(roots: [RootConfig] = [], updateStrategy: UpdateStrategy = .inPlace) {
+  public init(
+    roots: [RootConfig] = [], updateStrategy: UpdateStrategy = .inPlace,
+    driveFolderName: String = AppIdentity.driveRootFolderName
+  ) {
     self.roots = roots
     self.updateStrategy = updateStrategy
+    self.driveFolderName = Self.normalizedDriveFolderName(driveFolderName)
+  }
+
+  /// Blank names fall back to the default, so the owner can clear the field to reset it.
+  public static func normalizedDriveFolderName(_ name: String) -> String {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? AppIdentity.driveRootFolderName : trimmed
   }
 
   public init(from decoder: any Decoder) throws {
@@ -40,6 +52,8 @@ public struct MirrorConfig: Codable, Equatable, Sendable {
     updateStrategy =
       try container.decodeIfPresent(UpdateStrategy.self, forKey: .updateStrategy) ?? .inPlace
     isPaused = try container.decodeIfPresent(Bool.self, forKey: .isPaused) ?? false
+    driveFolderName = Self.normalizedDriveFolderName(
+      try container.decodeIfPresent(String.self, forKey: .driveFolderName) ?? "")
   }
 }
 

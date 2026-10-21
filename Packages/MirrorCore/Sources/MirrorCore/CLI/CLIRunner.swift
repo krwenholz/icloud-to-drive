@@ -96,9 +96,10 @@ public struct CLIRunner: Sendable {
     let resolved = try resolve(path)
     guard try requireFolder(resolved) else { return 1 }
     let drive = try await environment.makeDrive()
+    let config = try loadConfig()
     let engine = SyncEngine(
       drive: drive, stateStore: JSONFileStore(url: resolved.stateFile),
-      updateStrategy: try loadConfig().updateStrategy)
+      updateStrategy: config.updateStrategy, driveFolderName: config.driveFolderName)
     let report = await engine.reconcile(resolved.root)
     for line in ReportRenderer.render(report, rootName: resolved.root.displayName) {
       environment.out(line)

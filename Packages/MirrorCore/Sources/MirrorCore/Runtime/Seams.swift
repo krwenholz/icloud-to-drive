@@ -7,6 +7,7 @@ public protocol ReconcileEngine: Sendable {
   func status(of rootID: UUID) async -> RootStatus
   func mirrorFolderID() async -> String?
   func setUpdateStrategy(_ strategy: UpdateStrategy) async
+  func setDriveFolderName(_ name: String) async
 }
 
 extension SyncEngine: ReconcileEngine {}

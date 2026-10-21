@@ -330,6 +330,27 @@ final class SnapshotRecorder: @unchecked Sendable {
     await coordinator.stop()
   }
 
+  @Test func driveFolderNameIsSavedAndRenamesTheFolder() async throws {
+    let harness = try CoordinatorHarness()
+    defer { harness.engineHarness.cleanUp() }
+    try harness.saveConfig([try harness.engineHarness.makeRoot(files: ["a.md": "a"])])
+    let coordinator = harness.makeCoordinator()
+    let recorder = await SnapshotRecorder(coordinator)
+    await coordinator.start()
+    #expect(await eventually { recorder.latest.mirrorFolderID != nil })
+    let mirrorID = try #require(recorder.latest.mirrorFolderID)
+
+    await coordinator.setDriveFolderName("  Claude Notes ")
+    #expect(harness.savedConfig()?.driveFolderName == "Claude Notes")
+    #expect(await harness.drive.item(mirrorID)?.file.name == "Claude Notes")
+    #expect(await eventually { recorder.latest.driveFolderName == "Claude Notes" })
+
+    await coordinator.setDriveFolderName("")
+    #expect(harness.savedConfig()?.driveFolderName == "iCloud Mirror")
+    #expect(await harness.drive.item(mirrorID)?.file.name == "iCloud Mirror")
+    await coordinator.stop()
+  }
+
   @Test func diagnosticsIncludeRootsAndLog() async throws {
     let harness = try CoordinatorHarness()
     defer { harness.engineHarness.cleanUp() }

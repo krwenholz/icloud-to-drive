@@ -19,13 +19,15 @@ struct EngineHarness {
   func cleanUp() { try? FileManager.default.removeItem(at: base) }
 
   func makeEngine(
-    strategy: UpdateStrategy = .inPlace, reader: any FileReading = CoordinatedFileReader(),
+    strategy: UpdateStrategy = .inPlace, driveFolderName: String = AppIdentity.driveRootFolderName,
+    reader: any FileReading = CoordinatedFileReader(),
     drive: (any DriveClient)? = nil, maxConcurrentRequests: Int = 4
   ) -> SyncEngine {
     let clock = clock
     return SyncEngine(
       drive: drive ?? self.drive, stateStore: JSONFileStore(url: paths.stateFile),
-      reader: reader, updateStrategy: strategy, maxConcurrentRequests: maxConcurrentRequests,
+      reader: reader, updateStrategy: strategy, driveFolderName: driveFolderName,
+      maxConcurrentRequests: maxConcurrentRequests,
       now: { clock.now }, timeZone: TimeZone(identifier: "America/Los_Angeles")!,
       locale: Locale(identifier: "en_US_POSIX"))
   }

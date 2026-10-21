@@ -46,6 +46,7 @@ public struct MirrorSnapshot: Equatable, Sendable {
   public var account: AccountState = .signedOut
   public var isPaused = false
   public var updateStrategy: UpdateStrategy = .inPlace
+  public var driveFolderName = AppIdentity.driveRootFolderName
   public var mirrorFolderID: String?
   /// A problem that isn't about one root, such as sign-in failing.
   public var message: String?
@@ -70,6 +71,7 @@ public protocol MirrorService: Sendable {
   func removeRoot(_ id: UUID, trashDriveFolder: Bool) async throws
   func updateRoot(_ config: RootConfig) async throws
   func setUpdateStrategy(_ strategy: UpdateStrategy) async
+  func setDriveFolderName(_ name: String) async
   func importClientFile(from url: URL) async throws
   func signIn() async
   func signOut() async

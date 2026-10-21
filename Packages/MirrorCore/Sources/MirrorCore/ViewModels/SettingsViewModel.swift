@@ -137,6 +137,11 @@ public final class SettingsViewModel {
     await service.setUpdateStrategy(strategy)
   }
 
+  /// An empty name goes back to the default.
+  public func setDriveFolderName(_ name: String) async {
+    await service.setDriveFolderName(name)
+  }
+
   private func perform(_ action: @escaping () async throws -> Void) async {
     do {
       try await action()

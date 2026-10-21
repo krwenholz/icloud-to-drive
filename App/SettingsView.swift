@@ -220,9 +220,27 @@ private struct RootEditor: View {
 
 private struct GeneralSettings: View {
   let model: SettingsViewModel
+  /// What the owner has typed but not yet saved; `nil` shows the saved name.
+  @State private var folderNameDraft: String?
+  @FocusState private var folderNameFocused: Bool
 
   var body: some View {
     Form {
+      TextField(
+        "Drive folder name",
+        text: Binding(
+          get: { folderNameDraft ?? model.snapshot.driveFolderName },
+          set: { folderNameDraft = $0 }),
+        prompt: Text(AppIdentity.driveRootFolderName)
+      )
+      .focused($folderNameFocused)
+      .onSubmit(saveFolderName)
+      .onChange(of: folderNameFocused) { _, focused in if !focused { saveFolderName() } }
+      Text(
+        "The top-level Google Drive folder that holds your mirrored folders. "
+          + "Leave it empty to use “\(AppIdentity.driveRootFolderName)”."
+      )
+      .font(.callout).foregroundStyle(.secondary)
       Toggle(
         "Launch at login",
         isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
@@ -239,5 +257,12 @@ private struct GeneralSettings: View {
         .font(.callout).foregroundStyle(.secondary)
     }
     .formStyle(.grouped)
+  }
+
+  private func saveFolderName() {
+    guard let draft = folderNameDraft else { return }
+    folderNameDraft = nil
+    guard draft != model.snapshot.driveFolderName else { return }
+    Task { await model.setDriveFolderName(draft) }
   }
 }

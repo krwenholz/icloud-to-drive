@@ -62,10 +62,25 @@ public struct MirrorState: Codable, Equatable, Sendable {
   public var version = currentVersion
   /// The top-level `iCloud Mirror` folder.
   public var mirrorFolderID: String?
+  /// The name the mirror folder was last given, so a changed setting renames the existing
+  /// folder instead of creating a second one.
+  public var mirrorFolderName: String?
   /// Keyed by root UUID string; JSON objects need string keys.
   public var roots: [String: RootState] = [:]
 
   public init() {}
+
+  public init(from decoder: any Decoder) throws {
+    // Tolerate missing keys so older state files keep loading as fields are added.
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    version = try container.decodeIfPresent(Int.self, forKey: .version) ?? Self.currentVersion
+    mirrorFolderID = try container.decodeIfPresent(String.self, forKey: .mirrorFolderID)
+    // Before the name was configurable, the folder was always created with the default name.
+    mirrorFolderName =
+      try container.decodeIfPresent(String.self, forKey: .mirrorFolderName)
+      ?? (mirrorFolderID == nil ? nil : AppIdentity.driveRootFolderName)
+    roots = try container.decodeIfPresent([String: RootState].self, forKey: .roots) ?? [:]
+  }
 
   public subscript(root id: UUID) -> RootState {
     get { roots[id.uuidString] ?? RootState() }

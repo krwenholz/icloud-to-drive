@@ -183,6 +183,12 @@ struct SettingsViewModelTests {
     #expect(model.errorMessage != nil)
   }
 
+  @Test func forwardsTheDriveFolderName() async {
+    let model = SettingsViewModel(service: service, loginItem: loginItem)
+    await model.setDriveFolderName("Claude Notes")
+    #expect(await service.calls == [.setDriveFolderName("Claude Notes")])
+  }
+
   @Test func togglesLaunchAtLogin() async {
     let model = SettingsViewModel(service: service, loginItem: loginItem)
     model.setLaunchAtLogin(true)

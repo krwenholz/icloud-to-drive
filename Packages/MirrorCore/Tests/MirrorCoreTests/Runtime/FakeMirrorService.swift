@@ -12,6 +12,7 @@ actor FakeMirrorService: MirrorService {
     case removeRoot(UUID, Bool)
     case updateRoot(RootConfig)
     case setUpdateStrategy(UpdateStrategy)
+    case setDriveFolderName(String)
     case importClientFile(String)
     case signIn, signOut
   }
@@ -55,6 +56,7 @@ actor FakeMirrorService: MirrorService {
     try check()
   }
   func setUpdateStrategy(_ strategy: UpdateStrategy) { calls.append(.setUpdateStrategy(strategy)) }
+  func setDriveFolderName(_ name: String) { calls.append(.setDriveFolderName(name)) }
   func importClientFile(from url: URL) throws {
     calls.append(.importClientFile(url.path))
     try check()
