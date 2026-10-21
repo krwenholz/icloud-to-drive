@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import os
 
 @testable import MirrorCore
 
@@ -90,6 +91,7 @@ struct CoordinatorHarness {
   let auth: FakeAuth
   let watcher = FakeWatcher()
   let notifier = RecordingNotifier()
+  let engineCalls = EngineCallLog()
   let reader = ScriptedReader()
   let opened = OpenedURLs()
   var paths: AppPaths { engineHarness.paths }
@@ -114,13 +116,17 @@ struct CoordinatorHarness {
     let harness = engineHarness
     let opened = opened
     let reader = reader
+    let engineCalls = engineCalls
     return SyncCoordinator(
       .init(
         paths: paths, clock: clock,
         makeAuth: { _ in auth },
         makeEngine: { _, strategy in
-          harness.makeEngine(
-            strategy: strategy, reader: reader, drive: AuthCheckingDrive(base: drive, auth: auth))
+          LoggingEngine(
+            base: harness.makeEngine(
+              strategy: strategy, reader: reader,
+              drive: AuthCheckingDrive(base: drive, auth: auth)),
+            log: engineCalls)
         },
         lookUpEmail: { _ in "me@example.com" },
         openBrowser: { await opened.append($0) },
@@ -143,6 +149,37 @@ struct CoordinatorHarness {
     Set(
       await drive.items.values.filter { !$0.trashed && !$0.file.isFolder }.map(\.file.name))
   }
+}
+
+/// Remembers how the coordinator called `reconcile`.
+final class EngineCallLog: Sendable {
+  private let flags = OSAllocatedUnfairLock(initialState: [Bool]())
+  var retryExpiredFlags: [Bool] { flags.withLock { $0 } }
+  func record(retryExpired: Bool) { flags.withLock { $0.append(retryExpired) } }
+}
+
+/// A real engine that logs the flags it is called with.
+struct LoggingEngine: ReconcileEngine {
+  let base: SyncEngine
+  let log: EngineCallLog
+
+  func reconcile(_ root: RootConfig, applyPendingDeletions: Bool, retryExpiredFailures: Bool)
+    async -> RootSyncReport
+  {
+    log.record(retryExpired: retryExpiredFailures)
+    return await base.reconcile(
+      root, applyPendingDeletions: applyPendingDeletions,
+      retryExpiredFailures: retryExpiredFailures)
+  }
+  func removeRoot(_ rootID: UUID, trashDriveFolder: Bool) async throws {
+    try await base.removeRoot(rootID, trashDriveFolder: trashDriveFolder)
+  }
+  func status(of rootID: UUID) async -> RootStatus { await base.status(of: rootID) }
+  func mirrorFolderID() async -> String? { await base.mirrorFolderID() }
+  func setUpdateStrategy(_ strategy: UpdateStrategy) async {
+    await base.setUpdateStrategy(strategy)
+  }
+  func setDriveFolderName(_ name: String) async { await base.setDriveFolderName(name) }
 }
 
 /// Records every notification the coordinator asks for.
@@ -313,6 +350,34 @@ final class SnapshotRecorder: @unchecked Sendable {
     #expect(!(await harness.docNames().contains("much-later")))
     harness.clock.advance(by: .seconds(5 * 3600))
     #expect(await eventually { await harness.docNames().contains("much-later") })
+    await coordinator.stop()
+  }
+
+  @Test func onlySyncNowRetriesFailuresThatHaveAgedOut() async throws {
+    let harness = try CoordinatorHarness()
+    defer { harness.engineHarness.cleanUp() }
+    let root = try harness.engineHarness.makeRoot(files: ["bad.md": "x", "ok.md": "ok"])
+    try harness.saveConfig([root])
+    harness.reader.setFailing(["bad.md"])
+    let coordinator = harness.makeCoordinator()
+    let recorder = await SnapshotRecorder(coordinator)
+    await coordinator.start()
+    #expect(await eventually { recorder.latest.roots.first?.failingFiles == 1 })
+
+    // A month later a background pass skips the file and the menu stops counting it.
+    harness.engineHarness.clock.advance(by: 31 * 24 * 60 * 60)
+    harness.reader.clearReads()
+    await coordinator.handleWake()
+    #expect(harness.reader.readNames.isEmpty)
+    #expect(await eventually { recorder.latest.roots.first?.failingFiles == 0 })
+    #expect(recorder.latest.roots.first?.phase == .idle)
+
+    // Sync Now tries it again; it still fails, but quietly.
+    await coordinator.syncNow()
+    #expect(harness.reader.readNames == ["bad.md"])
+    #expect(harness.engineCalls.retryExpiredFlags.suffix(2) == [false, true])
+    #expect(await eventually { recorder.latest.roots.first?.phase == .idle })
+    #expect(recorder.latest.roots.first?.failingFiles == 0)
     await coordinator.stop()
   }
 

@@ -43,7 +43,8 @@ public struct RootSyncReport: Equatable, Sendable {
 public struct RootStatus: Equatable, Sendable {
   public var mirroredFiles: Int
   public var lastSuccessfulSync: Date?
-  public var failures: [RelativePath: String]
+  /// Failures still worth showing; ones older than `FailureRecord.expiry` are left out.
+  public var failures: [RelativePath: FailureRecord]
   public var driveFolderID: String?
 }
 
@@ -102,13 +103,18 @@ public actor SyncEngine {
 
   /// Brings a root's Drive folder in line with its local folder. Calls for the same root queue
   /// behind each other; calls for different roots run concurrently.
-  public func reconcile(_ root: RootConfig, applyPendingDeletions: Bool = false) async
-    -> RootSyncReport
-  {
+  ///
+  /// - Parameter retryExpiredFailures: also retry files whose failures have aged out and which
+  ///   haven't changed. Sync Now sets it; background passes leave those files alone.
+  public func reconcile(
+    _ root: RootConfig, applyPendingDeletions: Bool = false, retryExpiredFailures: Bool = false
+  ) async -> RootSyncReport {
     let previous = queues[root.id]
     let task = Task {
       _ = await previous?.value
-      return await self.performReconcile(root, applyPendingDeletions: applyPendingDeletions)
+      return await self.performReconcile(
+        root, applyPendingDeletions: applyPendingDeletions,
+        retryExpiredFailures: retryExpiredFailures)
     }
     queues[root.id] = task
     let report = await task.value
@@ -118,9 +124,11 @@ public actor SyncEngine {
 
   public func status(of rootID: UUID) -> RootStatus {
     let rootState = (try? state())?[root: rootID] ?? RootState()
+    let current = now()
     return RootStatus(
       mirroredFiles: rootState.files.count, lastSuccessfulSync: rootState.lastSuccessfulSync,
-      failures: rootState.failures, driveFolderID: rootState.folderID)
+      failures: rootState.failures.filter { !$0.value.isExpired(at: current) },
+      driveFolderID: rootState.folderID)
   }
 
   /// The top-level `iCloud Mirror` folder, once it exists.
@@ -151,9 +159,9 @@ public actor SyncEngine {
 
   // MARK: - Reconcile
 
-  private func performReconcile(_ root: RootConfig, applyPendingDeletions: Bool) async
-    -> RootSyncReport
-  {
+  private func performReconcile(
+    _ root: RootConfig, applyPendingDeletions: Bool, retryExpiredFailures: Bool
+  ) async -> RootSyncReport {
     let startedAt = now()
     var report = RootSyncReport(rootID: root.id, finishedAt: startedAt)
     do {
@@ -181,8 +189,20 @@ public actor SyncEngine {
 
     var contents: [RelativePath: PreparedContent] = [:]
     let before = (try? state())?[root: root.id] ?? RootState()
+    // A file that has failed for a month and hasn't changed will fail again, so don't read or
+    // upload it every pass. Editing it, or choosing Sync Now, tries again.
+    var expired: Set<RelativePath> = []
+    if !retryExpiredFailures {
+      for file in scan {
+        if let failure = before.failures[file.path], failure.isExpired(at: startedAt),
+          failure.isUnchanged(since: file)
+        {
+          expired.insert(file.path)
+        }
+      }
+    }
     for path in Planner.pathsNeedingContent(
-      scan: scan, state: before, convertToDocs: root.convertToDocs)
+      scan: scan, state: before, convertToDocs: root.convertToDocs, skipping: expired)
     {
       switch await reader.read(root.url.appending(path: path.value)) {
       case .content(let content): contents[path] = content
@@ -193,7 +213,8 @@ public actor SyncEngine {
 
     let plan = Planner.plan(
       scan: outcome, state: before, contentHashes: contents.mapValues(\.hash),
-      convertToDocs: root.convertToDocs, allowMassDeletion: applyPendingDeletions)
+      convertToDocs: root.convertToDocs, skipping: expired,
+      allowMassDeletion: applyPendingDeletions)
     report.deferred = plan.deferred.filter { report.failures[$0] == nil }
     report.heldDeletions = plan.heldDeletions.count
     report.heldPaths = plan.heldDeletions.compactMap(\.path).prefix(RootSyncReport.maxHeldPaths)
@@ -222,7 +243,13 @@ public actor SyncEngine {
 
     report.finishedAt = now()
     report.duration = report.finishedAt.timeIntervalSince(startedAt)
-    finishReconcile(root, report: report, scanned: Set(scan.map(\.path)))
+    finishReconcile(root, report: report, scan: scan)
+    // A retried failure that fails again unchanged is still expired, so it stays hidden.
+    if let failures = try? state()[root: root.id].failures {
+      report.failures = report.failures.filter {
+        !(failures[$0.key]?.isExpired(at: report.finishedAt) ?? false)
+      }
+    }
     await refreshStatusDoc(for: root, report: report)
     return report
   }
@@ -241,9 +268,8 @@ public actor SyncEngine {
       if let path = operation.path { try update(root) { $0.failures[path] = nil } }
       return OperationResult(operation: operation, failure: nil)
     } catch {
-      let message = "\(error)"
-      if let path = operation.path { try? update(root) { $0.failures[path] = message } }
-      return OperationResult(operation: operation, failure: message)
+      // The failure is recorded with the rest of the reconcile's, in `finishReconcile`.
+      return OperationResult(operation: operation, failure: "\(error)")
     }
   }
 
@@ -402,13 +428,19 @@ public actor SyncEngine {
     }
   }
 
-  private func finishReconcile(
-    _ root: RootConfig, report: RootSyncReport, scanned: Set<RelativePath>
-  ) {
+  private func finishReconcile(_ root: RootConfig, report: RootSyncReport, scan: [ScannedFile]) {
+    let files = Dictionary(scan.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
     try? update(root) { rootState in
       // Forget failures for files that no longer exist locally.
-      rootState.failures = rootState.failures.filter { scanned.contains($0.key) }
-      for (path, message) in report.failures { rootState.failures[path] = message }
+      rootState.failures = rootState.failures.filter { files[$0.key] != nil }
+      for (path, message) in report.failures {
+        let file = files[path]
+        rootState.failures[path] =
+          rootState.failures[path]?.recurring(message: message, file: file, at: report.finishedAt)
+          ?? FailureRecord(
+            message: message, firstSeen: report.finishedAt, lastSeen: report.finishedAt,
+            size: file?.size, modified: file?.modified)
+      }
       rootState.lastSuccessfulSync = report.finishedAt
     }
   }
@@ -504,7 +536,8 @@ public actor SyncEngine {
     let markdown = StatusDoc.markdown(
       StatusDoc.Content(
         rootName: root.displayName, lastSuccessfulSync: report.finishedAt,
-        mirroredFiles: rootState.files.count, failures: rootState.failures,
+        mirroredFiles: rootState.files.count,
+        failures: rootState.failures.filter { !$0.value.isExpired(at: report.finishedAt) },
         heldDeletions: report.heldDeletions, heldDeletionPaths: report.heldPaths,
         waitingForDownload: report.deferred.count, changes: report.changes,
         duration: report.duration, machineName: machineName, updateStrategy: updateStrategy,

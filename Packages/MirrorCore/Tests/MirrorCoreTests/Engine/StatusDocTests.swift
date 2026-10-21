@@ -5,7 +5,7 @@ import Testing
 
 @Suite struct StatusDocTests {
   private func content(
-    failures: [RelativePath: String] = [:], held: Int = 0, heldPaths: [String] = [],
+    failures: [RelativePath: FailureRecord] = [:], held: Int = 0, heldPaths: [String] = [],
     machine: String? = "Kyle's MacBook Pro", converts: Bool = true,
     strategy: UpdateStrategy = .inPlace, duration: TimeInterval = 2.4
   ) -> StatusDoc.Content {
@@ -67,9 +67,25 @@ import Testing
 
   @Test func capsListedFailures() {
     let failures = Dictionary(
-      uniqueKeysWithValues: (0..<23).map { (try! RelativePath("f\($0).md"), "boom") })
+      uniqueKeysWithValues: (0..<23).map { (try! RelativePath("f\($0).md"), failure("boom")) })
     let text = render(content(failures: failures))
     #expect(text.contains("- Failing files: 23"))
     #expect(text.contains("    - and 3 more"))
+  }
+
+  @Test func saysWhenEachFailureStarted() {
+    let started = Date(timeIntervalSince1970: 1_799_000_000)
+    let text = render(
+      content(failures: [try! RelativePath("a.md"): failure("Couldn't read the file", at: started)])
+    )
+    #expect(text.contains("    - `a.md`: Couldn't read the file (since Jan 3, 2027)\n"))
+  }
+
+  private func failure(
+    _ message: String, at date: Date = Date(timeIntervalSince1970: 1_799_000_000)
+  )
+    -> FailureRecord
+  {
+    FailureRecord(message: message, firstSeen: date, lastSeen: date, size: 1, modified: date)
   }
 }

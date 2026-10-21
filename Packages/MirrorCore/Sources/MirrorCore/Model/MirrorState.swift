@@ -34,6 +34,52 @@ public struct FileRecord: Codable, Equatable, Sendable {
   }
 }
 
+/// Why a file couldn't be mirrored, and since when.
+public struct FailureRecord: Codable, Equatable, Sendable {
+  /// A failure stops being shown, and the file stops being retried, after this long.
+  public static let expiry: TimeInterval = 30 * 24 * 60 * 60
+
+  public var message: String
+  public var firstSeen: Date
+  public var lastSeen: Date
+  /// The file's size and modification time when it failed. A file that has changed since is
+  /// a different problem and gets retried. `nil` for failures not tied to a file version,
+  /// such as a trash that failed after the file was deleted locally.
+  public var size: Int64?
+  public var modified: Date?
+
+  public init(
+    message: String, firstSeen: Date, lastSeen: Date, size: Int64? = nil, modified: Date? = nil
+  ) {
+    self.message = message
+    self.firstSeen = firstSeen
+    self.lastSeen = lastSeen
+    self.size = size
+    self.modified = modified
+  }
+
+  /// Old enough to be hidden. Whether the file has also changed is up to the caller, which has
+  /// the scan; a changed file is retried and then recorded afresh, so this stays accurate.
+  public func isExpired(at now: Date) -> Bool {
+    size != nil && now.timeIntervalSince(firstSeen) > Self.expiry
+  }
+
+  func isUnchanged(since file: ScannedFile) -> Bool {
+    size == file.size && modified == file.modified
+  }
+
+  /// The record after a failure: the same problem keeps its `firstSeen`, a changed file starts
+  /// a new clock.
+  func recurring(message: String, file: ScannedFile?, at now: Date) -> FailureRecord {
+    guard size == file?.size, modified == file?.modified else {
+      return FailureRecord(
+        message: message, firstSeen: now, lastSeen: now, size: file?.size, modified: file?.modified)
+    }
+    return FailureRecord(
+      message: message, firstSeen: firstSeen, lastSeen: now, size: size, modified: modified)
+  }
+}
+
 /// Everything the app knows about one root's mirror. It can always be rebuilt from Drive.
 public struct RootState: Codable, Equatable, Sendable {
   /// The root's own folder under `iCloud Mirror`.
@@ -44,8 +90,9 @@ public struct RootState: Codable, Equatable, Sendable {
   /// Drive folder IDs for mirrored subdirectories, keyed by directory path relative to the root.
   public var folders: [String: String] = [:]
   public var files: [RelativePath: FileRecord] = [:]
-  /// The last error per file, cleared when the file next syncs. Shown in the UI and status Doc.
-  public var failures: [RelativePath: String] = [:]
+  /// The last error per file, cleared when the file next syncs. Shown in the UI and status Doc
+  /// until it is older than `FailureRecord.expiry`.
+  public var failures: [RelativePath: FailureRecord] = [:]
   public var statusDocID: String?
   /// Docs replaced under `.replace` whose trash call failed. Retried on every reconcile so they
   /// don't linger as duplicates.
@@ -62,8 +109,11 @@ public struct RootState: Codable, Equatable, Sendable {
     folderName = try container.decodeIfPresent(String.self, forKey: .folderName)
     folders = try container.decodeIfPresent([String: String].self, forKey: .folders) ?? [:]
     files = try container.decodeIfPresent([RelativePath: FileRecord].self, forKey: .files) ?? [:]
+    // Failures used to be bare strings. They are only advisory and the next reconcile finds
+    // them again, so drop them rather than fail to load the whole state.
     failures =
-      try container.decodeIfPresent([RelativePath: String].self, forKey: .failures) ?? [:]
+      (try? container.decodeIfPresent([RelativePath: FailureRecord].self, forKey: .failures))
+      ?? [:]
     statusDocID = try container.decodeIfPresent(String.self, forKey: .statusDocID)
     orphanedFileIDs =
       try container.decodeIfPresent([String].self, forKey: .orphanedFileIDs) ?? []

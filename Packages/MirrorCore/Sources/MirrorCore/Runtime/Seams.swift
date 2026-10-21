@@ -2,7 +2,8 @@ import Foundation
 
 /// What the coordinator needs from the sync engine; `SyncEngine` is the real one.
 public protocol ReconcileEngine: Sendable {
-  func reconcile(_ root: RootConfig, applyPendingDeletions: Bool) async -> RootSyncReport
+  func reconcile(_ root: RootConfig, applyPendingDeletions: Bool, retryExpiredFailures: Bool)
+    async -> RootSyncReport
   func removeRoot(_ rootID: UUID, trashDriveFolder: Bool) async throws
   func status(of rootID: UUID) async -> RootStatus
   func mirrorFolderID() async -> String?

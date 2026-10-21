@@ -270,7 +270,9 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
 
     syncing.insert(id)
     await publish()
-    let report = await engine.reconcile(root, applyPendingDeletions: applyPendingDeletions)
+    // Sync Now (and other explicit syncs) also retry failures that have aged out.
+    let report = await engine.reconcile(
+      root, applyPendingDeletions: applyPendingDeletions, retryExpiredFailures: explicit)
     syncing.remove(id)
     lastReports[id] = report
     log(report, root: root)

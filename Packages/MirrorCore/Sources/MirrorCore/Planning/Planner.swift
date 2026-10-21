@@ -69,14 +69,18 @@ public enum Planner {
   /// size or modification time changed, and files uploaded in the wrong format. Everything
   /// else is skipped without being read.
   public static func pathsNeedingContent(
-    scan: [ScannedFile], state: RootState, convertToDocs: Bool = true
+    scan: [ScannedFile], state: RootState, convertToDocs: Bool = true,
+    skipping: Set<RelativePath> = []
   ) -> [RelativePath] {
     scan.filter { file in
+      guard !skipping.contains(file.path) else { return false }
       guard let record = state.files[file.path] else { return true }
       return !statMatches(record, file) || record.converted != convertToDocs
     }.map(\.path).sorted()
   }
 
+  /// - Parameter skipping: files left alone this time, such as ones that have been failing for
+  ///   too long. They still count as present, so skipping never causes a trash.
   /// - Parameter contentHashes: prepared-content hashes for `pathsNeedingContent`. A path with no
   ///   hash is deferred to a later pass, and never treated as deleted.
   public static func plan(
@@ -84,6 +88,7 @@ public enum Planner {
     state: RootState,
     contentHashes: [RelativePath: String],
     convertToDocs: Bool = true,
+    skipping: Set<RelativePath> = [],
     allowMassDeletion: Bool = false
   ) -> SyncPlan {
     guard case .files(let scan) = outcome else {
@@ -97,7 +102,7 @@ public enum Planner {
     var operations: [PlannedOperation] = []
     var additions: [(file: ScannedFile, hash: String)] = []
 
-    for file in scan.sorted(by: { $0.path < $1.path }) {
+    for file in scan.sorted(by: { $0.path < $1.path }) where !skipping.contains(file.path) {
       let record = state.files[file.path]
       if let record, statMatches(record, file), record.converted == convertToDocs { continue }
       guard let hash = contentHashes[file.path] else {

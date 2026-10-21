@@ -12,7 +12,7 @@ public enum StatusDoc {
     public var rootName: String
     public var lastSuccessfulSync: Date
     public var mirroredFiles: Int
-    public var failures: [RelativePath: String]
+    public var failures: [RelativePath: FailureRecord]
     /// How many deletions are on hold, which can be more than `heldDeletionPaths` lists.
     public var heldDeletions: Int
     public var heldDeletionPaths: [RelativePath]
@@ -30,6 +30,11 @@ public enum StatusDoc {
     local.timeStyle = .long
     local.timeZone = timeZone
     local.locale = locale
+    let day = DateFormatter()
+    day.dateStyle = .medium
+    day.timeStyle = .none
+    day.timeZone = timeZone
+    day.locale = locale
     let iso = ISO8601DateFormatter()
     let changes = content.changes
 
@@ -58,10 +63,12 @@ public enum StatusDoc {
       lines.append("- Failing files: none")
     } else {
       lines.append("- Failing files: \(content.failures.count)")
-      for (path, message) in content.failures.sorted(by: { $0.key < $1.key })
+      for (path, failure) in content.failures.sorted(by: { $0.key < $1.key })
         .prefix(maxListedFailures)
       {
-        lines.append("    - `\(path.value)`: \(message)")
+        lines.append(
+          "    - `\(path.value)`: \(failure.message) (since \(day.string(from: failure.firstSeen)))"
+        )
       }
       if content.failures.count > maxListedFailures {
         lines.append("    - and \(content.failures.count - maxListedFailures) more")
