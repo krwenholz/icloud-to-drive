@@ -44,11 +44,9 @@ From the repo root (`alias mirrorctl='swift run --package-path Packages/MirrorCo
 
 ### The app
 
-11. Build it, copy it to `/Applications`, and open it:
+11. Build it, install it to `/Applications`, and open it. Run the same thing again to upgrade; it quits the running copy first:
     ```sh
-    scripts/test.sh
-    cp -R "build/DerivedData/Build/Products/Debug/Drive Mirror.app" /Applications/
-    open "/Applications/Drive Mirror.app"
+    /usr/bin/make install
     ```
 12. In Settings, add your folders and turn on launch at login.
 13. Check Drive for `iCloud Mirror/<folder>/` and its `_sync-status` Doc. Then ask Claude to find a phrase from one of your notes.
