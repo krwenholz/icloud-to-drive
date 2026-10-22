@@ -140,10 +140,16 @@ struct SettingsViewModelTests {
   @Test func describesAccount() async {
     let model = SettingsViewModel(service: service, loginItem: loginItem)
     await model.start()
-    #expect(model.accountDescription == "Not signed in")
-    #expect(model.canSignIn)
+    // Until the coordinator has looked at the client file and Keychain, signing in can't work.
+    #expect(model.accountDescription == "Checking…")
+    #expect(!model.canSignIn)
 
     var snapshot = MirrorSnapshot()
+    snapshot.account = .signedOut
+    await service.push(snapshot)
+    #expect(await eventually { model.accountDescription == "Not signed in" })
+    #expect(model.canSignIn)
+
     snapshot.account = .signedIn(email: nil)
     await service.push(snapshot)
     #expect(await eventually { model.accountDescription == "Signed in" })
@@ -255,6 +261,22 @@ struct SettingsViewModelTests {
     let model = SettingsViewModel(service: service, loginItem: loginItem)
     await model.setDriveFolderName("Claude Notes")
     #expect(await service.calls == [.setDriveFolderName("Claude Notes")])
+  }
+
+  @Test func namesNewRootsTheWayFinderDoes() {
+    let containers = URL(
+      filePath: "/Users/me/Library/Mobile Documents", directoryHint: .isDirectory)
+    let finderNames = [
+      "/Users/me/Library/Mobile Documents/27N4MQEA55~pro~writer": "iA Writer",
+      "/Users/me/Notes": "Notes",
+    ]
+    func name(_ url: URL) -> String {
+      SettingsViewModel.defaultDisplayName(for: url) { finderNames[$0] ?? "?" }
+    }
+
+    #expect(name(containers.appending(path: "27N4MQEA55~pro~writer/Documents")) == "iA Writer")
+    #expect(name(containers.appending(path: "com~apple~CloudDocs")) == "iCloud Drive")
+    #expect(name(URL(filePath: "/Users/me/Notes/", directoryHint: .isDirectory)) == "Notes")
   }
 
   @Test func togglesLaunchAtLogin() async {

@@ -37,6 +37,7 @@ public final class SettingsViewModel {
 
   public var accountDescription: String {
     switch snapshot.account {
+    case .loading: "Checking…"
     case .needsClientFile: "No Google client file imported"
     case .signedOut: "Not signed in"
     case .signedIn(let email?): "Signed in as \(email)"
@@ -71,9 +72,29 @@ public final class SettingsViewModel {
 
   public var roots: [RootConfig] { snapshot.roots.map(\.config) }
 
-  /// The name a new root gets unless the owner changes it.
-  public nonisolated static func defaultDisplayName(for url: URL) -> String {
-    url.standardizedFileURL.lastPathComponent
+  /// Where the folder picker opens. iCloud Drive and every app's iCloud folder live here, but
+  /// it's inside the hidden `~/Library`, so it's hard to browse to.
+  public nonisolated static var iCloudContainersDirectory: URL {
+    URL.homeDirectory.appending(path: "Library/Mobile Documents", directoryHint: .isDirectory)
+  }
+
+  /// The name a new root gets unless the owner changes it: what Finder shows, so an app's
+  /// iCloud folder is "iA Writer" rather than its on-disk "Documents".
+  public nonisolated static func defaultDisplayName(
+    for url: URL,
+    finderName: (String) -> String = { FileManager.default.displayName(atPath: $0) }
+  ) -> String {
+    let folder = url.standardizedFileURL
+    let container = folder.deletingLastPathComponent()
+    if folder.lastPathComponent == "com~apple~CloudDocs" { return "iCloud Drive" }
+    // An app's iCloud folder is `Mobile Documents/<container>/Documents`; Finder names it
+    // after the container.
+    if folder.lastPathComponent == "Documents",
+      container.deletingLastPathComponent().lastPathComponent == "Mobile Documents"
+    {
+      return finderName(container.path)
+    }
+    return finderName(folder.path)
   }
 
   public func addRoot(_ url: URL, displayName: String? = nil) async {

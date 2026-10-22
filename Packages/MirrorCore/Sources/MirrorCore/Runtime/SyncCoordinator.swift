@@ -209,8 +209,10 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
   }
 
   public func signIn() async {
+    // The client file may have appeared since launch, so look again before giving up.
+    if auth == nil { await loadAuth() }
     guard let auth else {
-      snapshot.message = "Import your Google client file before signing in."
+      snapshot.message = Self.needsClientFileMessage
       await publish()
       return
     }
@@ -283,7 +285,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
       self.engine = nil
       signInExpired = true
       snapshot.account = .signedOut
-      snapshot.message = "Google sign-in expired. Sign in again from Settings."
+      snapshot.message = Self.signInExpiredMessage
     }
     await refreshDriveDetails()
     await publish()
@@ -361,8 +363,11 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
   }
 
   private func loadAuth() async {
-    guard let clientConfig = try? ClientFile.load(applicationSupport: deps.paths.applicationSupport)
-    else {
+    let clientConfig: OAuthClientConfig
+    do {
+      clientConfig = try ClientFile.load(applicationSupport: deps.paths.applicationSupport)
+    } catch {
+      deps.log.info("no usable Google client file: \(error)")
       auth = nil
       engine = nil
       snapshot.account = .needsClientFile
@@ -371,6 +376,7 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     }
     let auth = deps.makeAuth(clientConfig)
     self.auth = auth
+    clearAccountMessage()
     if await auth.isSignedIn {
       await adoptSignedIn(auth)
     } else {
@@ -380,7 +386,19 @@ public actor SyncCoordinator<C: Clock<Duration>>: MirrorService {
     }
   }
 
+  static var needsClientFileMessage: String { "Import your Google client file before signing in." }
+  static var signInExpiredMessage: String { "Google sign-in expired. Sign in again from Settings." }
+
+  /// Account messages describe a state the owner just fixed, so they shouldn't outlive it.
+  private func clearAccountMessage() {
+    let accountMessages = [Self.needsClientFileMessage, Self.signInExpiredMessage]
+    if let message = snapshot.message, accountMessages.contains(message) {
+      snapshot.message = nil
+    }
+  }
+
   private func adoptSignedIn(_ auth: any AuthSession) async {
+    clearAccountMessage()
     let engine = deps.makeEngine(auth, config.updateStrategy)
     // Set before publishing the engine, so no reconcile can start with the default name.
     await engine.setDriveFolderName(config.driveFolderName)

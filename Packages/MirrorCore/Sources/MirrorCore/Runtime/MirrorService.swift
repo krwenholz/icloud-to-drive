@@ -38,6 +38,8 @@ public struct RootSnapshot: Equatable, Identifiable, Sendable {
 }
 
 public enum AccountState: Equatable, Sendable {
+  /// The client file and Keychain haven't been checked yet, just after launch.
+  case loading
   /// `google-client.json` hasn't been imported yet.
   case needsClientFile
   case signedOut
@@ -48,7 +50,7 @@ public enum AccountState: Equatable, Sendable {
 /// Everything the UI renders, published as a whole on every change.
 public struct MirrorSnapshot: Equatable, Sendable {
   public var roots: [RootSnapshot] = []
-  public var account: AccountState = .signedOut
+  public var account: AccountState = .loading
   public var isPaused = false
   public var updateStrategy: UpdateStrategy = .inPlace
   public var driveFolderName = AppIdentity.driveRootFolderName

@@ -104,14 +104,15 @@ struct CoordinatorHarness {
   init(signedIn: Bool = true, clientFile: Bool = true) throws {
     engineHarness = try EngineHarness()
     auth = FakeAuth(signedIn: signedIn)
-    if clientFile {
-      try FileManager.default.createDirectory(
-        at: paths.directory, withIntermediateDirectories: true)
-      try Data(
-        #"{"installed":{"client_id":"id","client_secret":"secret","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token"}}"#
-          .utf8
-      ).write(to: paths.clientFile)
-    }
+    if clientFile { try writeClientFile() }
+  }
+
+  func writeClientFile() throws {
+    try FileManager.default.createDirectory(at: paths.directory, withIntermediateDirectories: true)
+    try Data(
+      #"{"installed":{"client_id":"id","client_secret":"secret","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token"}}"#
+        .utf8
+    ).write(to: paths.clientFile)
   }
 
   func makeCoordinator() -> SyncCoordinator<ManualClock> {
@@ -253,6 +254,28 @@ final class SnapshotRecorder: @unchecked Sendable {
 
     #expect(await eventually { recorder.latest.account == .needsClientFile })
     #expect(await harness.drive.calls.isEmpty)
+    await coordinator.stop()
+  }
+
+  @Test func signInFindsAClientFileAddedAfterLaunchAndClearsTheOldMessage() async throws {
+    let harness = try CoordinatorHarness(signedIn: false, clientFile: false)
+    defer { harness.engineHarness.cleanUp() }
+    let coordinator = harness.makeCoordinator()
+    let recorder = await SnapshotRecorder(coordinator)
+    #expect(recorder.latest.account == .loading)
+    await coordinator.start()
+
+    await coordinator.signIn()
+    #expect(
+      await eventually {
+        recorder.latest.message == SyncCoordinator<ManualClock>.needsClientFileMessage
+      })
+
+    try harness.writeClientFile()
+    await coordinator.signIn()
+
+    #expect(await eventually { recorder.latest.account == .signedIn(email: "me@example.com") })
+    #expect(recorder.latest.message == nil)
     await coordinator.stop()
   }
 

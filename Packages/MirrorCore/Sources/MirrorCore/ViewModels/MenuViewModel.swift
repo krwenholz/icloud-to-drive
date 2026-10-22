@@ -65,7 +65,10 @@ public final class MenuViewModel {
       }
     }
     if hasProblem || snapshot.message != nil { return .error }
-    if case .signedIn = snapshot.account { return .idle }
+    switch snapshot.account {
+    case .signedIn, .loading: return .idle
+    default: break
+    }
     return snapshot.roots.isEmpty ? .idle : .error
   }
 
@@ -118,6 +121,7 @@ public final class MenuViewModel {
   public var accountNotice: String? {
     if let message = snapshot.message { return message }
     switch snapshot.account {
+    case .loading: return nil
     case .needsClientFile: return "Import your Google client file in Settings."
     case .signedOut: return "Sign in to Google in Settings."
     case .signedIn: return snapshot.roots.isEmpty ? "Add a folder in Settings." : nil

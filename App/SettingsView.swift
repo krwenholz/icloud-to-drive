@@ -135,6 +135,7 @@ private struct FolderSettings: View {
     panel.canChooseFiles = false
     panel.allowsMultipleSelection = false
     panel.prompt = "Mirror"
+    panel.directoryURL = SettingsViewModel.iCloudContainersDirectory
     guard panel.runModal() == .OK, let url = panel.url else { return }
     newName = SettingsViewModel.defaultDisplayName(for: url)
     pendingFolder = PendingFolder(url: url)
