@@ -2,3 +2,23 @@
 [tools]
 xcodegen = "2.46.0"
 actionlint = "1.7.12"
+
+[tasks.check]
+description = "Everything CI runs: lint, tests, and an app build"
+run = ["mise run lint", "mise run test"]
+
+[tasks.test]
+description = "Package tests, then generate and build the app (unsigned without a team)"
+run = "scripts/test.sh"
+
+[tasks.lint]
+description = "Check formatting and lint rules without changing files"
+run = "scripts/lint.sh"
+
+[tasks.format]
+description = "Format the Swift sources in place"
+run = "swift format format --in-place --recursive --parallel App Packages/MirrorCore/Sources Packages/MirrorCore/Tests Packages/MirrorCore/Package.swift"
+
+[tasks.install]
+description = "Build, replace /Applications/Drive Mirror.app, and relaunch it"
+run = "scripts/install.sh"

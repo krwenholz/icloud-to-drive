@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks formatting and lint rules without changing files. `make format` fixes.
+# Checks formatting and lint rules without changing files. `mise run format` fixes.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

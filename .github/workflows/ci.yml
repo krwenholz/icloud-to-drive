@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
-      - run: scripts/lint.sh
+      - run: mise run lint
 
   test:
     runs-on: macos-26
@@ -32,4 +32,4 @@ jobs:
           path: Packages/MirrorCore/.build
           key: spm-${{ runner.os }}-${{ hashFiles('Packages/MirrorCore/Package.swift', 'Packages/MirrorCore/Package.resolved') }}
       - run: xcodebuild -version
-      - run: scripts/test.sh
+      - run: mise run test

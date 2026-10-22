@@ -8,16 +8,16 @@ The app target (`App/`) is a thin SwiftUI layer. `mirrorctl` is a CLI over the s
 
 ## Commands
 
-Run from the repo root. Use `/usr/bin/make`, not bare `make`.
+Run from the repo root. Tasks live in `mise.toml`; `mise tasks` lists them.
 
 | Task | Command |
 |---|---|
 | Install pinned tools | `mise install` |
-| Everything CI runs | `/usr/bin/make check` |
+| Everything CI runs | `mise run check` |
 | Package tests only | `swift test --package-path Packages/MirrorCore` |
 | Package tests + app build | `scripts/test.sh` |
 | Lint (no changes) | `scripts/lint.sh` |
-| Format in place | `/usr/bin/make format` |
+| Format in place | `mise run format` |
 | Regenerate Xcode project | `mise exec -- xcodegen generate` |
 
 `scripts/test.sh` builds unsigned when `Config/Local.xcconfig` has no `DEVELOPMENT_TEAM`.
@@ -46,7 +46,7 @@ Don't add signing flags to make a build pass.
 - Use `@Observable` for view models, not `ObservableObject`.
 - Make time, randomness, file system roots, and HTTP injectable so tests are deterministic.
   Engine tests use `InMemoryDriveClient`, temp directories, and an injectable clock.
-- Run `/usr/bin/make format` rather than hand-fixing style. `.swift-format` holds the rules.
+- Run `mise run format` rather than hand-fixing style. `.swift-format` holds the rules.
 
 ## Safety
 
@@ -71,4 +71,4 @@ Don't add signing flags to make a build pass.
 - Delegate to cheaper subagents when the task makes sense for one: searches, research,
   mechanical edits, boilerplate tests. Keep design decisions and final review with the main
   agent.
-- Done means `/usr/bin/make check` passed. If it didn't run, say so.
+- Done means `mise run check` passed. If it didn't run, say so.

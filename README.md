@@ -46,7 +46,7 @@ From the repo root (`alias mirrorctl='swift run --package-path Packages/MirrorCo
 
 11. Build it, install it to `/Applications`, and open it. Run the same thing again to upgrade; it quits the running copy first:
     ```sh
-    /usr/bin/make install
+    mise run install
     ```
 12. In Settings, add your folders and turn on launch at login.
 13. Check Drive for `iCloud Mirror/<folder>/` and its `_sync-status` Doc. Then ask Claude to find a phrase from one of your notes.
@@ -100,8 +100,8 @@ All the logic lives in the `MirrorCore` Swift package and is tested with `swift 
 | Command | What it does |
 |---|---|
 | `mise install` | Installs pinned tools (XcodeGen, actionlint) |
-| `/usr/bin/make check` | Lint, tests, and an app build. Unsigned if no team is set. What CI runs. |
-| `/usr/bin/make format` | Formats the Swift sources |
+| `mise run check` | Lint, tests, and an app build. Unsigned if no team is set. What CI runs. |
+| `mise run format` | Formats the Swift sources |
 | `mise exec -- xcodegen generate` | Generates `DriveMirror.xcodeproj` (gitignored) for Xcode |
 | `LIVE_DRIVE=1 swift test --package-path Packages/MirrorCore` | Adds the test that hits your real Drive |
 | `UPDATE_GOLDEN=1 swift test --package-path Packages/MirrorCore` | Regenerates the golden request fixtures. Review the diff! |
