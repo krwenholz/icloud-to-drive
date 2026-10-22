@@ -151,7 +151,7 @@ import Testing
     #expect(try await statusDoc(engine).contains("- Failing files: none"))
   }
 
-  @Test func syncNowThatFailsAgainStaysHidden() async throws {
+  @Test func syncNowThatFailsAgainResurfacesTheError() async throws {
     defer { harness.cleanUp() }
     let root = try harness.makeRoot(files: ["bad.md": "x"])
     reader.setFailing(["bad.md"])
@@ -163,8 +163,13 @@ import Testing
     let report = await engine.reconcile(root, retryExpiredFailures: true)
 
     #expect(reader.readNames == ["bad.md"])
-    #expect(report.failures.isEmpty)
-    #expect(await status(engine, root).failures.isEmpty)
+    #expect(report.failures.keys.map(\.value) == ["bad.md"])
+    #expect(await status(engine, root).failures.count == 1)
+
+    // It's a fresh problem now, so it stays visible for another 30 days of background passes.
+    harness.clock.advance(by: 29 * Self.day)
+    _ = await engine.reconcile(root)
+    #expect(await status(engine, root).failures.count == 1)
   }
 
   @Test func aFailureThatIsFixedBeforeItExpiresIsCleared() async throws {

@@ -399,12 +399,11 @@ final class SnapshotRecorder: @unchecked Sendable {
     #expect(await eventually { recorder.latest.roots.first?.failingFiles == 0 })
     #expect(recorder.latest.roots.first?.phase == .idle)
 
-    // Sync Now tries it again; it still fails, but quietly.
+    // Sync Now tries it again; it still fails, so the error is back in front of the owner.
     await coordinator.syncNow()
     #expect(harness.reader.readNames == ["bad.md"])
     #expect(harness.engineCalls.retryExpiredFlags.suffix(2) == [false, true])
-    #expect(await eventually { recorder.latest.roots.first?.phase == .idle })
-    #expect(recorder.latest.roots.first?.failingFiles == 0)
+    #expect(await eventually { recorder.latest.roots.first?.failingFiles == 1 })
     await coordinator.stop()
   }
 

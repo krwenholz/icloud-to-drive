@@ -75,7 +75,7 @@ You'll get a macOS notification when something _newly_ goes wrong: files failing
 - **Code blocks lose their formatting.** Google's Markdown conversion turns fenced code into plain paragraphs. Still searchable, just not pretty. Everything else (headings, nested lists, emphasis, links, tables) converts well.
 - **Excluding files trashes their Docs.** Changing patterns is a real change. The deletion guard catches big ones.
 - **The deletion guard.** If a sync would trash more than 25% of a folder's Docs _and_ more than 10 Docs, it holds off and asks you. Usually that means iCloud hiccuped or the folder went missing. If the deletions are real, choose **Apply Pending Deletions**. A folder that can't be read never trashes anything.
-- **Errors age out.** A file that's failed for 30 days without changing stops retrying and drops off the status Doc. Edit it or hit **Sync Now** to try again.
+- **Errors age out.** A file that's failed for 30 days without changing stops retrying and drops off the status Doc. Edit it or hit **Sync Now** to try again. If it still fails, the error comes back.
 - **Trashed the Drive folder?** The next sync notices and rebuilds it from your local files.
 - **"Replace" breaks links.** The default, **In place**, updates the same Doc so links keep working, and the probe confirmed it works. Replace makes a new Doc on every edit. Only use it if a future probe says In place stopped working.
 

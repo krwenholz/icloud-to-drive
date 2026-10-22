@@ -243,8 +243,9 @@ public actor SyncEngine {
 
     report.finishedAt = now()
     report.duration = report.finishedAt.timeIntervalSince(startedAt)
-    finishReconcile(root, report: report, scan: scan)
-    // A retried failure that fails again unchanged is still expired, so it stays hidden.
+    finishReconcile(
+      root, report: report, scan: scan, restartFailureClocks: retryExpiredFailures)
+    // A background retry that fails again unchanged is still expired, so it stays hidden.
     if let failures = try? state()[root: root.id].failures {
       report.failures = report.failures.filter {
         !(failures[$0.key]?.isExpired(at: report.finishedAt) ?? false)
@@ -428,15 +429,20 @@ public actor SyncEngine {
     }
   }
 
-  private func finishReconcile(_ root: RootConfig, report: RootSyncReport, scan: [ScannedFile]) {
+  /// - Parameter restartFailureClocks: the owner asked for a retry (Sync Now), so a file that
+  ///   fails again is a fresh problem they should see, not an old one that stays hidden.
+  private func finishReconcile(
+    _ root: RootConfig, report: RootSyncReport, scan: [ScannedFile], restartFailureClocks: Bool
+  ) {
     let files = Dictionary(scan.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
     try? update(root) { rootState in
       // Forget failures for files that no longer exist locally.
       rootState.failures = rootState.failures.filter { files[$0.key] != nil }
       for (path, message) in report.failures {
         let file = files[path]
+        let previous = restartFailureClocks ? nil : rootState.failures[path]
         rootState.failures[path] =
-          rootState.failures[path]?.recurring(message: message, file: file, at: report.finishedAt)
+          previous?.recurring(message: message, file: file, at: report.finishedAt)
           ?? FailureRecord(
             message: message, firstSeen: report.finishedAt, lastSeen: report.finishedAt,
             size: file?.size, modified: file?.modified)
