@@ -4,22 +4,22 @@
 
 # Drive Mirror
 
-> My notes live in iCloud. Claude reads Google Drive. This is the duct tape.
+I want to access my journal in Claude. The journal is in iCloud. Claude can't connect to iCloud :(  So let's sync to Drive!
 
 Drive Mirror is a little macOS menu bar app. It watches Markdown folders in iCloud Drive and mirrors each `.md` file into Google Drive as a Google Doc. That makes the notes searchable and readable through Claude's Google Drive connector.
 
-It's a personal tool for one Mac that stays awake. It works fine for me. Your mileage may vary!
+This is a purely personal tool. It solves some issues with wakefulness, file watching, and sync status that cobbling together tools wouldn't solve. It was also fun to build.
 
-**One way, on purpose.** iCloud is the source of truth. Drive holds a disposable copy under an `iCloud Mirror` folder, with one subfolder per mirrored folder. Nothing ever flows back.
-
+Highlights:
+- One way sync.
 - **Fast.** A saved note shows up in Drive about five seconds later.
 - **Self-healing.** It also does a full pass on launch, on wake, and on a timer (hourly by default), so sleep, reboots, and dropped file events don't matter.
-- **Honest about freshness.** Each folder in Drive gets a `_sync-status` Doc with the last sync time, what changed, and anything that's failing. Claude can read it to judge how stale the mirror is.
+- **Metadataful.** Each folder in Drive gets a `_sync-status` Doc with the last sync time, what changed, and anything that's failing. Claude can read it to judge how stale the mirror is.
 - **Hard to hurt you.** It only asks for the `drive.file` scope, so it can only see files it created. It never permanently deletes anything. It only trashes.
 
 ## Setup
 
-About 20 minutes, most of it in Google Cloud's console.
+About 10 minutes, most of it in Google Cloud's console.
 
 ### Google Cloud
 
