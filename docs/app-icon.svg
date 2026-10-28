@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <clipPath id="body"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5fb8ff"/><stop offset="1" stop-color="#1c5fd1"/>
+    </linearGradient>
+    <linearGradient id="bark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a86b3c"/><stop offset="1" stop-color="#7a4622"/>
+    </linearGradient>
+    <radialGradient id="wood" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f6d9a6"/><stop offset="1" stop-color="#e2b273"/>
+    </radialGradient>
+  </defs>
+  <g clip-path="url(#body)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#river)"/>
+    <!-- a small cloud upstream -->
+    <path fill="#ffffff" opacity="0.95"
+          d="M230 330 H420 a55 55 0 0 0 4 -110 a76 76 0 0 0 -144 -20 a58 58 0 0 0 -76 58 a38 38 0 0 0 26 72 z"/>
+    <!-- the log: bark body heading downstream, end grain facing us -->
+    <rect x="300" y="520" width="440" height="190" rx="95" fill="url(#bark)"/>
+    <g stroke="#5e3416" stroke-width="10" stroke-linecap="round" opacity="0.55">
+      <line x1="420" y1="560" x2="560" y2="560"/>
+      <line x1="380" y1="615" x2="610" y2="615"/>
+      <line x1="440" y1="670" x2="580" y2="670"/>
+    </g>
+    <circle cx="700" cy="615" r="112" fill="url(#wood)" stroke="#7a4622" stroke-width="16"/>
+    <g fill="none" stroke="#b9824a" stroke-width="10">
+      <circle cx="700" cy="615" r="78"/>
+      <circle cx="700" cy="615" r="50"/>
+      <circle cx="700" cy="615" r="22"/>
+    </g>
+    <!-- water line: the log sits in the river, not on top of it -->
+    <path d="M100 660 q60 -26 120 0 t120 0 t120 0 t120 0 t120 0 t120 0 t120 0 V924 H100 z" fill="#1d63d6" opacity="0.88"/>
+    <g fill="none" stroke="#ffffff" stroke-width="20" stroke-linecap="round" opacity="0.55">
+      <path d="M160 760 q60 -26 120 0 t120 0 t120 0 t120 0 t120 0 t120 0"/>
+      <path d="M220 840 q60 -26 120 0 t120 0 t120 0 t120 0 t120 0"/>
+    </g>
+  </g>
+</svg>

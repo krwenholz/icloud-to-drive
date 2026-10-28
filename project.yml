@@ -32,6 +32,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.krw.DriveMirror
         PRODUCT_NAME: Drive Mirror
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
